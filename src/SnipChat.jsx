@@ -27,34 +27,61 @@ const FILTERS = [
 
 const CAM_STATE = { IDLE: "idle", ASKING: "asking", GRANTED: "granted", DENIED: "denied", ERROR: "error" };
 
-// ─── Toast System ────────────────────────────────────────────────────────────
+// ─── Human Toast System ───────────────────────────────────────────────────────
 function ToastContainer({ toasts }) {
   return (
     <div style={{
-      position: "absolute", top: 70, left: 12, right: 12,
-      zIndex: 200, display: "flex", flexDirection: "column", gap: 8,
+      position: "absolute", bottom: 28, left: 16, right: 16,
+      zIndex: 200, display: "flex", flexDirection: "column", gap: 10,
       pointerEvents: "none",
     }}>
-      {toasts.map(t => (
+      {toasts.map((t, i) => (
         <div key={t.id} style={{
-          background: t.type === "success" ? `${BRAND.green}22`
-                    : t.type === "error"   ? `${BRAND.red}22`
-                    : `${BRAND.yellow}22`,
-          border: `1px solid ${
-            t.type === "success" ? BRAND.green
-          : t.type === "error"   ? BRAND.red
-          : BRAND.yellow}88`,
-          borderRadius: 14,
-          padding: "10px 16px",
-          display: "flex", alignItems: "center", gap: 10,
-          backdropFilter: "blur(12px)",
-          animation: "toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1)",
-          fontFamily: "'DM Sans', sans-serif",
+          background: `rgba(10, 10, 15, 0.95)`,
+          backdropFilter: "blur(20px)",
+          borderRadius: 60,
+          padding: "12px 18px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          border: `1px solid ${t.type === "success" ? BRAND.green : t.type === "error" ? BRAND.red : BRAND.yellow}33`,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.05)",
+          animation: "toastSlide 0.35s cubic-bezier(0.34, 1.2, 0.64, 1)",
+          transformOrigin: "bottom center",
         }}>
-          <span style={{ fontSize: 18 }}>{t.icon}</span>
           <span style={{
-            color: BRAND.text, fontSize: 13, fontWeight: 600, lineHeight: 1.4,
-          }}>{t.message}</span>
+            fontSize: 24,
+            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
+          }}>{t.icon}</span>
+          <div style={{ flex: 1 }}>
+            <p style={{
+              color: BRAND.text,
+              fontSize: 14,
+              fontWeight: 600,
+              margin: 0,
+              lineHeight: 1.3,
+              fontFamily: "'DM Sans', sans-serif",
+            }}>
+              {t.message}
+            </p>
+            {t.subMessage && (
+              <p style={{
+                color: BRAND.muted,
+                fontSize: 11,
+                margin: "4px 0 0 0",
+                fontFamily: "'DM Sans', sans-serif",
+              }}>
+                {t.subMessage}
+              </p>
+            )}
+          </div>
+          <div style={{
+            width: 3,
+            height: 28,
+            background: t.type === "success" ? BRAND.green : t.type === "error" ? BRAND.red : BRAND.yellow,
+            borderRadius: 3,
+            opacity: 0.8,
+          }} />
         </div>
       ))}
     </div>
@@ -63,9 +90,9 @@ function ToastContainer({ toasts }) {
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
-  const toast = useCallback((message, { icon = "✨", type = "info", duration = 2800 } = {}) => {
+  const toast = useCallback((message, { icon = "✨", type = "info", subMessage = "", duration = 3200 } = {}) => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, message, icon, type }]);
+    setToasts(prev => [...prev, { id, message, icon, type, subMessage }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
   }, []);
   return { toasts, toast };
@@ -416,6 +443,7 @@ export default function SnipChat() {
         await videoRef.current.play();
       }
       setCamState(CAM_STATE.GRANTED);
+      toast("Camera's ready! 📸", { icon: "🎥", type: "success", subMessage: "You look great today" });
     } catch (err) {
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setCamState(CAM_STATE.DENIED);
@@ -423,7 +451,7 @@ export default function SnipChat() {
         setCamState(CAM_STATE.ERROR);
       }
     }
-  }, [facingMode]);
+  }, [facingMode, toast]);
 
   useEffect(() => { startCamera(); }, [startCamera]);
 
@@ -475,14 +503,14 @@ export default function SnipChat() {
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     setCaptured(canvas.toDataURL("image/png"));
-    toast("snip captured! ✂️", { icon: "📸", type: "info" });
+    toast("Got it! 🎬", { icon: "✨", type: "info", subMessage: "Now add a caption or send it" });
   };
 
   const handleCapture = () => { if (timerCount === null) doCapture(); };
 
   const startTimer = () => {
     if (timerCount !== null) return;
-    toast("timer started!", { icon: "⏱️", type: "info", duration: 1500 });
+    toast("3... 2... 1... smile! 😁", { icon: "⏱️", type: "info", duration: 2500 });
     let count = 3;
     setTimerCount(count);
     const iv = setInterval(() => {
@@ -496,7 +524,7 @@ export default function SnipChat() {
     const next = facingMode === "user" ? "environment" : "user";
     setFacingMode(next);
     startCamera(next);
-    toast("camera flipped", { icon: "🔄", type: "info", duration: 1500 });
+    toast(next === "user" ? "Back to you! 🤳" : "Looking outside! 🌍", { icon: "🔄", type: "info", duration: 1500 });
   };
 
   // Save to SnipCloud (localStorage)
@@ -512,15 +540,14 @@ export default function SnipChat() {
         time: Date.now(),
       };
       existing.unshift(entry);
-      // Keep last 20 snips
       localStorage.setItem("snipcloud", JSON.stringify(existing.slice(0, 20)));
-      toast("saved to SnipCloud ☁️", { icon: "☁️", type: "success" });
+      toast("Saved to your cloud! ☁️", { icon: "☁️", type: "success", subMessage: "You can find it anytime" });
     } catch {
-      toast("couldn't save to SnipCloud", { icon: "❌", type: "error" });
+      toast("Oops, cloud save failed 😅", { icon: "💔", type: "error", subMessage: "Try again?" });
     }
   };
 
-  // Save to local device (download into snipchat folder)
+  // Save to local device
   const saveToLocal = () => {
     if (!captured) return;
     try {
@@ -529,9 +556,9 @@ export default function SnipChat() {
       const filename = `snipchat/snip-${Date.now()}.png`;
       a.download = filename;
       a.click();
-      toast("saved to snipchat folder 💾", { icon: "💾", type: "success" });
+      toast("Saved to your device! 💾", { icon: "📁", type: "success", subMessage: "Check your SnipChat folder" });
     } catch {
-      toast("couldn't save locally", { icon: "❌", type: "error" });
+      toast("Couldn't save locally 😢", { icon: "❌", type: "error" });
     }
   };
 
@@ -549,7 +576,7 @@ export default function SnipChat() {
     setChatInput("");
     setCaptured(null);
     setShowChat(true);
-    toast("snip sent! 🚀", { icon: "✉️", type: "success" });
+    toast("Snip sent! ✈️", { icon: "💌", type: "success", subMessage: "Your friend will see it soon" });
   };
 
   const viewSnip = (msg) => {
@@ -557,13 +584,12 @@ export default function SnipChat() {
     setMessages(prev => prev.map(m =>
       m.id === msg.id ? { ...m, viewed: true, expires: Date.now() + 5000 } : m
     ));
-    toast("opening snip — closes in 5s", { icon: "👁️", type: "info", duration: 2000 });
+    toast("Here's your snip! 👀", { icon: "🔓", type: "info", subMessage: "It'll disappear in 5 seconds" });
   };
 
   const closeViewer = useCallback(() => {
     setViewingSnip(null);
-    toast("snip closed", { icon: "🔒", type: "info", duration: 1500 });
-  }, [toast]);
+  }, []);
 
   const showGate = camState !== CAM_STATE.GRANTED;
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
@@ -588,8 +614,8 @@ export default function SnipChat() {
           from { opacity: 0; }
           to   { opacity: 1; }
         }
-        @keyframes toastIn {
-          from { transform: translateY(-16px) scale(0.95); opacity: 0; }
+        @keyframes toastSlide {
+          from { transform: translateY(30px) scale(0.95); opacity: 0; }
           to   { transform: translateY(0) scale(1); opacity: 1; }
         }
       `}</style>
@@ -603,7 +629,7 @@ export default function SnipChat() {
       }}>
         {showGate && <PermissionGate state={camState} onRequest={() => startCamera()} />}
 
-        {/* Toast notifications */}
+        {/* Human-friendly toast notifications */}
         <ToastContainer toasts={toasts} />
 
         {/* Top bar */}
@@ -779,12 +805,13 @@ export default function SnipChat() {
                   borderRadius: 24, padding: "12px 16px", color: BRAND.text,
                   fontSize: 14, outline: "none", fontFamily: "'DM Sans', sans-serif",
                 }}
+                onFocus={() => toast("Say something nice! 💭", { icon: "✏️", type: "info", duration: 2000 })}
               />
             </div>
 
             <div style={{ display: "flex", gap: 10, padding: "8px 20px 24px" }}>
               {/* Retake */}
-              <button onClick={() => { setCaptured(null); setChatInput(""); }} style={{
+              <button onClick={() => { setCaptured(null); setChatInput(""); toast("Let's try again! 🔄", { icon: "🎬", type: "info", duration: 1500 }); }} style={{
                 flex: 1, padding: "14px 0", borderRadius: 14,
                 background: BRAND.card, border: `1px solid ${BRAND.border}`,
                 color: BRAND.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
@@ -811,13 +838,12 @@ export default function SnipChat() {
               <SaveButton onSaveCloud={saveToCloud} onSaveLocal={saveToLocal} />
             </div>
 
-            {/* Save hint */}
             <div style={{
               textAlign: "center", fontSize: 11, color: BRAND.muted,
               paddingBottom: 10, paddingTop: 0,
               fontFamily: "'DM Sans', sans-serif",
             }}>
-              tap <strong style={{ color: BRAND.text }}>save</strong> → SnipCloud ☁️ &nbsp;·&nbsp; hold → local 💾
+              💡 tap <strong style={{ color: BRAND.text }}>save</strong> → cloud &nbsp;·&nbsp; hold → my phone
             </div>
           </div>
         )}
