@@ -36,6 +36,13 @@ jobs:
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
 
+      # ✅ FIX: Add Android platform before syncing
+      - name: Install Capacitor Android platform
+        run: npm install @capacitor/android
+
+      - name: Add Android platform
+        run: npx cap add android
+
       - name: Sync Capacitor
         run: npx cap sync android
 
@@ -79,6 +86,13 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      # ✅ FIX: Add Android platform before syncing
+      - name: Install Capacitor Android platform
+        run: npm install @capacitor/android
+
+      - name: Add Android platform
+        run: npx cap add android
 
       - name: Sync Capacitor
         run: npx cap sync android
