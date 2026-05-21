@@ -147,7 +147,7 @@ function PermissionGate({ state, onRequest }) {
 }
 
 // Chat Overlay as separate component
-const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
+const ChatOverlay = memo(({ messages, onClose, onViewsnip }) => {
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
   
   return (
@@ -161,7 +161,7 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
         padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
       }}>
         <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
-          💬 Snaps {unviewedCount > 0 && `(${unviewedCount})`}
+          💬 snips {unviewedCount > 0 && `(${unviewedCount})`}
         </span>
         <button onClick={onClose} style={{
           background: BRAND.card, border: "none", borderRadius: 30,
@@ -174,10 +174,10 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
       <div style={{ flex: 1, overflowY: "auto", padding: 16, gap: 12, display: "flex", flexDirection: "column" }}>
         {messages.length === 0 ? (
           <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
-            No snaps yet. Take a photo and send it!
+            No snips yet. Take a photo and send it!
           </p>
         ) : messages.map((msg) => (
-          <div key={msg.id} onClick={() => !msg.viewed && msg.expires > Date.now() && onViewSnap(msg)} style={{
+          <div key={msg.id} onClick={() => !msg.viewed && msg.expires > Date.now() && onViewsnip(msg)} style={{
             background: BRAND.card, borderRadius: 16, padding: 12,
             border: `1px solid ${!msg.viewed && msg.expires > Date.now() ? BRAND.yellow : BRAND.border}`,
             cursor: !msg.viewed && msg.expires > Date.now() ? "pointer" : "default",
@@ -187,7 +187,7 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
             <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
               <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
               <div>
-                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 Snap"}</div>
+                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 snip"}</div>
                 <div style={{ color: BRAND.muted, fontSize: 10 }}>{new Date(msg.time).toLocaleTimeString()}</div>
               </div>
             </div>
@@ -200,22 +200,22 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
       
       <div style={{ padding: 16, borderTop: `1px solid ${BRAND.border}` }}>
         <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center", marginBottom: 8 }}>
-          Take a photo → Add caption → Send Snap!
+          Take a photo → Add caption → Send snip!
         </p>
       </div>
     </div>
   );
 });
 
-// Snap Viewer as separate component
-const SnapViewer = memo(({ snap, onClose }) => {
+// snip Viewer as separate component
+const snipViewer = memo(({ snip, onClose }) => {
   useEffect(() => {
-    // Auto-close after 5 seconds (like real Snapchat)
+    // Auto-close after 5 seconds (like real snipchat)
     const timer = setTimeout(onClose, 5000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  if (!snap) return null;
+  if (!snip) return null;
 
   return (
     <div style={{
@@ -224,16 +224,16 @@ const SnapViewer = memo(({ snap, onClose }) => {
       alignItems: "center", justifyContent: "center",
       animation: "fadeIn 0.2s ease",
     }} onClick={onClose}>
-      <img src={snap.image} alt="Snap" style={{
+      <img src={snip.image} alt="snip" style={{
         width: "100%", height: "100%", objectFit: "contain",
       }} />
-      {snap.text && (
+      {snip.text && (
         <div style={{
           position: "absolute", bottom: 100, left: 20, right: 20,
           background: "rgba(0,0,0,0.8)", padding: 12, borderRadius: 20,
           textAlign: "center", color: BRAND.text, fontSize: 16,
         }}>
-          {snap.text}
+          {snip.text}
         </div>
       )}
       <button onClick={onClose} style={{
@@ -269,7 +269,7 @@ export default function SnipChat() {
   const [showChat,     setShowChat]     = useState(false);
   const [messages,     setMessages]     = useState([]);
   const [chatInput,    setChatInput]    = useState("");
-  const [viewingSnap,  setViewingSnap]  = useState(null);
+  const [viewingsnip,  setViewingsnip]  = useState(null);
 
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
 
@@ -384,7 +384,7 @@ export default function SnipChat() {
     a.click();
   };
 
-  const sendSnap = () => {
+  const sendsnip = () => {
     if (!captured) return;
     const newMsg = {
       id: Date.now(),
@@ -400,15 +400,15 @@ export default function SnipChat() {
     setShowChat(true);
   };
 
-  const viewSnap = (msg) => {
-    setViewingSnap(msg);
+  const viewsnip = (msg) => {
+    setViewingsnip(msg);
     setMessages(prev => prev.map(m => 
       m.id === msg.id ? { ...m, viewed: true, expires: Date.now() + 5000 } : m
     ));
   };
 
   const closeViewer = useCallback(() => {
-    setViewingSnap(null);
+    setViewingsnip(null);
   }, []);
 
   const showGate = camState !== CAM_STATE.GRANTED;
@@ -641,7 +641,7 @@ export default function SnipChat() {
                 <X size={16} color={BRAND.text} strokeWidth={2} />
                 Retake
               </button>
-              <button onClick={sendSnap} style={{
+              <button onClick={sendsnip} style={{
                 flex: 1, padding: "14px 0", borderRadius: 14,
                 background: BRAND.yellow, border: "none",
                 color: BRAND.dark, fontWeight: 700, fontSize: 15, cursor: "pointer",
@@ -649,7 +649,7 @@ export default function SnipChat() {
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
               }}>
                 <Send size={16} color={BRAND.dark} strokeWidth={2} />
-                Send Snap
+                Send snip
               </button>
               <button onClick={downloadSnip} style={{
                 flex: 1, padding: "14px 0", borderRadius: 14,
@@ -669,13 +669,13 @@ export default function SnipChat() {
           <ChatOverlay 
             messages={messages}
             onClose={() => setShowChat(false)}
-            onViewSnap={viewSnap}
+            onViewsnip={viewsnip}
           />
         )}
         
-        {viewingSnap && (
-          <SnapViewer 
-            snap={viewingSnap}
+        {viewingsnip && (
+          <snipViewer 
+            snip={viewingsnip}
             onClose={closeViewer}
           />
         )}
