@@ -1,87 +1,54 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Cloud, HardDrive } from "lucide-react";
+import { MessageCircle, User, Timer, RefreshCw, X, Camera, Send, Zap, Sparkles } from "lucide-react";
 
 const BRAND = {
-  yellow: "#FFE036",
-  dark:   "#0A0A0F",
-  card:   "#1C1C28",
-  border: "#2A2A3A",
-  text:   "#F0F0FF",
-  muted:  "#8888AA",
-  green:  "#36FFB0",
-  red:    "#FF4D6D",
+  yellow: "#FFFC00", // Snapchat's exact yellow
+  dark:   "#000000",
+  card:   "#1A1A1A",
+  border: "#2C2C2C",
+  text:   "#FFFFFF",
+  muted:  "#858585",
 };
 
 const FILTERS = [
-  { id: "normal", label: "Normal", css: "none" },
-  { id: "vivid",  label: "Vivid",  css: "saturate(2) contrast(1.1)" },
-  { id: "bw",     label: "B&W",    css: "grayscale(1) contrast(1.2)" },
-  { id: "noir",   label: "Noir",   css: "grayscale(1) contrast(1.6) brightness(0.85)" },
-  { id: "sepia",  label: "Sepia",  css: "sepia(0.85) saturate(1.2)" },
-  { id: "warm",   label: "Warm",   css: "sepia(0.35) saturate(1.6) hue-rotate(-10deg)" },
-  { id: "cool",   label: "Cool",   css: "hue-rotate(30deg) saturate(1.4) brightness(1.05)" },
-  { id: "fade",   label: "Fade",   css: "brightness(1.15) contrast(0.78) saturate(0.75)" },
-  { id: "dream",  label: "Dream",  css: "brightness(1.1) saturate(1.5) contrast(0.9) hue-rotate(10deg)" },
-  { id: "retro",  label: "Retro",  css: "sepia(0.45) saturate(1.4) contrast(1.15) brightness(0.95)" },
+  { id: "normal", label: "Normal", css: "none", icon: "✨" },
+  { id: "vivid",  label: "Vivid",  css: "saturate(2) contrast(1.1)", icon: "🎨" },
+  { id: "bw",     label: "B&W",    css: "grayscale(1) contrast(1.2)", icon: "⚫" },
+  { id: "noir",   label: "Noir",   css: "grayscale(1) contrast(1.6) brightness(0.85)", icon: "🎬" },
+  { id: "sepia",  label: "Sepia",  css: "sepia(0.85) saturate(1.2)", icon: "📻" },
 ];
 
 const CAM_STATE = { IDLE: "idle", ASKING: "asking", GRANTED: "granted", DENIED: "denied", ERROR: "error" };
 
-// ─── Human Toast System ───────────────────────────────────────────────────────
+// ─── Snapchat-style Toast ─────────────────────────────────────────────────────
 function ToastContainer({ toasts }) {
   return (
     <div style={{
-      position: "absolute", bottom: 28, left: 16, right: 16,
-      zIndex: 200, display: "flex", flexDirection: "column", gap: 10,
-      pointerEvents: "none",
+      position: "absolute", bottom: 100, left: 16, right: 16,
+      zIndex: 200, display: "flex", flexDirection: "column", gap: 8,
+      pointerEvents: "none", alignItems: "center",
     }}>
-      {toasts.map((t, i) => (
+      {toasts.map((t) => (
         <div key={t.id} style={{
-          background: `rgba(10, 10, 15, 0.95)`,
+          background: "rgba(0,0,0,0.85)",
           backdropFilter: "blur(20px)",
-          borderRadius: 60,
-          padding: "12px 18px",
+          borderRadius: 30,
+          padding: "8px 18px",
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          border: `1px solid ${t.type === "success" ? BRAND.green : t.type === "error" ? BRAND.red : BRAND.yellow}33`,
-          boxShadow: "0 8px 24px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.05)",
-          animation: "toastSlide 0.35s cubic-bezier(0.34, 1.2, 0.64, 1)",
-          transformOrigin: "bottom center",
+          gap: 8,
+          border: "0.5px solid rgba(255,255,255,0.1)",
+          animation: "toastPop 0.3s cubic-bezier(0.34, 1.2, 0.64, 1)",
         }}>
+          <span style={{ fontSize: 16 }}>{t.icon}</span>
           <span style={{
-            fontSize: 24,
-            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
-          }}>{t.icon}</span>
-          <div style={{ flex: 1 }}>
-            <p style={{
-              color: BRAND.text,
-              fontSize: 14,
-              fontWeight: 600,
-              margin: 0,
-              lineHeight: 1.3,
-              fontFamily: "'DM Sans', sans-serif",
-            }}>
-              {t.message}
-            </p>
-            {t.subMessage && (
-              <p style={{
-                color: BRAND.muted,
-                fontSize: 11,
-                margin: "4px 0 0 0",
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                {t.subMessage}
-              </p>
-            )}
-          </div>
-          <div style={{
-            width: 3,
-            height: 28,
-            background: t.type === "success" ? BRAND.green : t.type === "error" ? BRAND.red : BRAND.yellow,
-            borderRadius: 3,
-            opacity: 0.8,
-          }} />
+            color: "#FFF",
+            fontSize: 13,
+            fontWeight: 500,
+            fontFamily: "'SF Pro Text', -apple-system, BlinkMacSystemFont, 'DM Sans', sans-serif",
+          }}>
+            {t.message}
+          </span>
         </div>
       ))}
     </div>
@@ -90,9 +57,9 @@ function ToastContainer({ toasts }) {
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
-  const toast = useCallback((message, { icon = "✨", type = "info", subMessage = "", duration = 3200 } = {}) => {
+  const toast = useCallback((message, { icon = "✨", duration = 2500 } = {}) => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, message, icon, type, subMessage }]);
+    setToasts(prev => [...prev, { id, message, icon }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
   }, []);
   return { toasts, toast };
@@ -113,47 +80,84 @@ function SnipLogo({ size = 32 }) {
   );
 }
 
-// ─── Filter Pill ──────────────────────────────────────────────────────────────
-function FilterPill({ filter, active, onClick, videoRef }) {
-  const canvasRef = useRef(null);
+// ─── Filter Carousel (Snapchat-style horizontal scroll) ──────────────────────
+function FilterCarousel({ filters, activeId, onSelect, videoRef }) {
+  const scrollRef = useRef(null);
+  const previewRefs = useRef({});
+
   useEffect(() => {
-    const iv = setInterval(() => {
-      const v = videoRef.current;
-      const c = canvasRef.current;
-      if (!v || !c || v.readyState < 2) return;
-      const ctx = c.getContext("2d");
-      ctx.filter = filter.css;
-      ctx.drawImage(v, 0, 0, c.width, c.height);
-    }, 200);
-    return () => clearInterval(iv);
-  }, [filter.css, videoRef]);
+    filters.forEach(filter => {
+      if (!previewRefs.current[filter.id]) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 70;
+        canvas.height = 70;
+        previewRefs.current[filter.id] = canvas;
+      }
+    });
+
+    const intervals = {};
+    filters.forEach(filter => {
+      intervals[filter.id] = setInterval(() => {
+        const v = videoRef.current;
+        const c = previewRefs.current[filter.id];
+        if (!v || !c || v.readyState < 2) return;
+        const ctx = c.getContext("2d");
+        ctx.filter = filter.css;
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+      }, 100);
+    });
+
+    return () => {
+      Object.values(intervals).forEach(iv => clearInterval(iv));
+    };
+  }, [filters, videoRef]);
 
   return (
-    <button onClick={onClick} style={{
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-      background: "none", border: "none", cursor: "pointer", flexShrink: 0,
-      padding: "0 4px",
-      transform: active ? "scale(1.12)" : "scale(1)",
-      transition: "transform 0.15s ease",
+    <div ref={scrollRef} style={{
+      position: "absolute", bottom: 100, left: 0, right: 0,
+      overflowX: "auto", overflowY: "hidden",
+      display: "flex", gap: 8, padding: "0 16px",
+      scrollbarWidth: "none", WebkitOverflowScrolling: "touch",
+      zIndex: 20,
     }}>
-      <div style={{
-        width: 58, height: 58, borderRadius: 14, overflow: "hidden",
-        border: active ? `2.5px solid ${BRAND.yellow}` : `2px solid ${BRAND.border}`,
-        boxShadow: active ? `0 0 14px ${BRAND.yellow}66` : "none",
-        transition: "all 0.2s ease", background: BRAND.card,
-      }}>
-        <canvas ref={canvasRef} width={58} height={58}
-          style={{ display: "block", width: "100%", height: "100%" }} />
-      </div>
-      <span style={{
-        fontSize: 10, fontFamily: "'DM Sans', sans-serif",
-        fontWeight: active ? 700 : 400,
-        color: active ? BRAND.yellow : BRAND.muted,
-        letterSpacing: "0.02em", transition: "color 0.2s",
-      }}>
-        {filter.label}
-      </span>
-    </button>
+      {filters.map((filter) => (
+        <button
+          key={filter.id}
+          onClick={() => onSelect(filter.id)}
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            gap: 6, background: "none", border: "none", cursor: "pointer",
+            flexShrink: 0, transition: "transform 0.2s",
+            transform: activeId === filter.id ? "scale(1.1)" : "scale(1)",
+          }}
+        >
+          <div style={{
+            width: 70, height: 70, borderRadius: 16, overflow: "hidden",
+            border: activeId === filter.id ? `2px solid ${BRAND.yellow}` : "2px solid transparent",
+            boxShadow: activeId === filter.id ? `0 0 20px ${BRAND.yellow}66` : "none",
+            background: "#1A1A1A",
+          }}>
+            <canvas
+              ref={el => {
+                if (el && previewRefs.current[filter.id]) {
+                  const ctx = el.getContext("2d");
+                  ctx.drawImage(previewRefs.current[filter.id], 0, 0, 70, 70);
+                }
+              }}
+              width={70} height={70}
+              style={{ width: "100%", height: "100%", display: "block" }}
+            />
+          </div>
+          <span style={{
+            fontSize: 11, fontWeight: activeId === filter.id ? 600 : 400,
+            color: activeId === filter.id ? BRAND.yellow : "#FFF",
+            fontFamily: "'SF Pro Text', -apple-system, sans-serif",
+          }}>
+            {filter.label}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -166,49 +170,19 @@ function PermissionGate({ state, onRequest }) {
       background: BRAND.dark, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
       padding: 32, gap: 24, textAlign: "center",
-      fontFamily: "'DM Sans', sans-serif",
     }}>
-      <SnipLogo size={64} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.text, letterSpacing: "-0.04em" }}>
-          Snip<span style={{ color: BRAND.yellow }}>Chat</span>
-        </h1>
-        <p style={{ fontSize: 14, color: BRAND.muted, lineHeight: 1.6, maxWidth: 280 }}>
-          {state === CAM_STATE.DENIED
-            ? "Camera access was denied. Please allow it in your browser site settings, then tap Try Again."
-            : state === CAM_STATE.ERROR
-            ? "Something went wrong starting the camera. Make sure no other app is using it."
-            : "SnipChat needs camera access to work. Your camera is never recorded or uploaded."}
-        </p>
-      </div>
-      {state === CAM_STATE.DENIED && (
-        <div style={{
-          background: BRAND.card, border: `1px solid ${BRAND.border}`,
-          borderRadius: 14, padding: "14px 20px",
-          fontSize: 13, color: BRAND.muted, lineHeight: 1.7, maxWidth: 300,
-        }}>
-          <strong style={{ color: BRAND.text, display: "block", marginBottom: 6 }}>How to fix it:</strong>
-          Tap the <strong style={{ color: BRAND.yellow }}>lock icon</strong> or <strong style={{ color: BRAND.yellow }}>info icon</strong>{" "}
-          in your browser address bar → Site settings → Camera → Allow
-        </div>
-      )}
+      <SnipLogo size={80} />
+      <h1 style={{ fontSize: 28, fontWeight: 700, color: BRAND.yellow, letterSpacing: "-0.5px" }}>
+        SnipChat
+      </h1>
       <button onClick={onRequest} disabled={isAsking} style={{
-        padding: "16px 40px", borderRadius: 16,
-        background: isAsking ? BRAND.border : BRAND.yellow,
-        border: "none", color: BRAND.dark,
-        fontWeight: 800, fontSize: 16, cursor: isAsking ? "default" : "pointer",
-        fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em",
-        display: "flex", alignItems: "center", gap: 10,
-        transition: "background 0.2s, transform 0.1s",
-        transform: isAsking ? "scale(0.97)" : "scale(1)",
-        minWidth: 200, justifyContent: "center",
+        padding: "14px 32px", borderRadius: 30,
+        background: BRAND.yellow, border: "none", color: "#000",
+        fontWeight: 700, fontSize: 16, cursor: "pointer",
+        fontFamily: "'SF Pro Text', sans-serif",
       }}>
-        <Camera size={20} color={isAsking ? BRAND.muted : BRAND.dark} strokeWidth={2} />
-        {isAsking ? "Opening camera..." : state === CAM_STATE.DENIED || state === CAM_STATE.ERROR ? "Try Again" : "Allow Camera"}
+        {isAsking ? "Opening camera..." : "Continue"}
       </button>
-      <p style={{ fontSize: 11, color: BRAND.border, letterSpacing: "0.04em" }}>
-        OPEN SOURCE · PRIVATE · NO ADS
-      </p>
     </div>
   );
 }
@@ -219,53 +193,56 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 60,
-      background: BRAND.dark, display: "flex", flexDirection: "column",
-      animation: "slideUp 0.25s ease",
+      background: "#000", display: "flex", flexDirection: "column",
+      animation: "slideUp 0.3s ease",
     }}>
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
+        padding: "60px 16px 16px",
+        background: "linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)",
       }}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
-          💬 snips {unviewedCount > 0 && `(${unviewedCount})`}
-        </span>
-        <button onClick={onClose} style={{
-          background: BRAND.card, border: "none", borderRadius: 30,
-          padding: 8, cursor: "pointer",
-        }}>
-          <X size={18} color={BRAND.text} />
-        </button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 20, fontWeight: 700, color: "#FFF" }}>
+            Chats
+          </span>
+          <button onClick={onClose} style={{
+            background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 30,
+            width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+          }}>
+            <X size={18} color="#FFF" />
+          </button>
+        </div>
       </div>
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, gap: 12, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "0 16px" }}>
         {messages.length === 0 ? (
-          <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
-            No snips yet. Take a photo and send it!
-          </p>
+          <div style={{ textAlign: "center", marginTop: 60, color: "#858585" }}>
+            <User size={48} strokeWidth={1} />
+            <p style={{ marginTop: 12 }}>No chats yet</p>
+          </div>
         ) : messages.map((msg) => (
           <div key={msg.id} onClick={() => !msg.viewed && msg.expires > Date.now() && onViewSnip(msg)} style={{
-            background: BRAND.card, borderRadius: 16, padding: 12,
-            border: `1px solid ${!msg.viewed && msg.expires > Date.now() ? BRAND.yellow : BRAND.border}`,
+            display: "flex", gap: 12, padding: "12px 0",
+            borderBottom: "0.5px solid rgba(255,255,255,0.1)",
             cursor: !msg.viewed && msg.expires > Date.now() ? "pointer" : "default",
-            opacity: msg.viewed || msg.expires < Date.now() ? 0.5 : 1,
-            transition: "all 0.2s",
+            opacity: msg.viewed ? 0.5 : 1,
           }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-              <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} alt="snip" />
-              <div>
-                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 snip"}</div>
-                <div style={{ color: BRAND.muted, fontSize: 10 }}>{new Date(msg.time).toLocaleTimeString()}</div>
-              </div>
+            <div style={{
+              width: 50, height: 50, borderRadius: 25, overflow: "hidden",
+              border: !msg.viewed && msg.expires > Date.now() ? `2px solid ${BRAND.yellow}` : "none",
+            }}>
+              <img src={msg.image} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
             </div>
-            <div style={{ fontSize: 12, color: BRAND.muted }}>
-              {msg.viewed ? "👁️ Viewed" : msg.expires > Date.now() ? "✨ Tap to view" : "⏳ Expired"}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, color: "#FFF" }}>Friend</span>
+                <span style={{ fontSize: 11, color: "#858585" }}>{new Date(msg.time).toLocaleTimeString()}</span>
+              </div>
+              <span style={{ fontSize: 13, color: "#858585" }}>
+                {msg.text || "📸 Snap"}
+              </span>
             </div>
           </div>
         ))}
-      </div>
-      <div style={{ padding: 16, borderTop: `1px solid ${BRAND.border}` }}>
-        <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center" }}>
-          Take a photo → Add caption → send snip!
-        </p>
       </div>
     </div>
   );
@@ -278,152 +255,47 @@ const SnipViewer = memo(({ snip, onClose }) => {
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  if (!snip) return null;
   return (
     <div style={{
-      position: "absolute", inset: 0, zIndex: 70,
-      background: "#000", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      animation: "fadeIn 0.2s ease",
+      position: "absolute", inset: 0, zIndex: 70, background: "#000",
+      display: "flex", alignItems: "center", justifyContent: "center",
     }} onClick={onClose}>
       <img src={snip.image} alt="snip" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
       {snip.text && (
         <div style={{
-          position: "absolute", bottom: 100, left: 20, right: 20,
-          background: "rgba(0,0,0,0.8)", padding: 12, borderRadius: 20,
-          textAlign: "center", color: BRAND.text, fontSize: 16,
+          position: "absolute", bottom: 80, left: 20, right: 20,
+          background: "rgba(0,0,0,0.7)", padding: 12, borderRadius: 20,
+          textAlign: "center", color: "#FFF",
         }}>
           {snip.text}
         </div>
       )}
-      <button onClick={onClose} style={{
-        position: "absolute", top: 20, right: 20,
-        background: BRAND.card, border: "none", borderRadius: 30,
-        padding: 10, cursor: "pointer",
-      }}>
-        <X size={20} color={BRAND.text} />
-      </button>
       <div style={{
-        position: "absolute", bottom: 40, left: 20, right: 20,
-        textAlign: "center", color: BRAND.muted, fontSize: 12,
-      }}>
-        Tap anywhere to close
-      </div>
+        position: "absolute", top: 20, right: 20,
+        width: 8, height: 8, borderRadius: 4, background: BRAND.yellow,
+        animation: "pulse 1s infinite",
+      }} />
     </div>
   );
 });
 
-// ─── Save Button with hold-to-save ────────────────────────────────────────────
-function SaveButton({ onSaveCloud, onSaveLocal }) {
-  const holdTimer = useRef(null);
-  const [holding, setHolding] = useState(false);
-  const [holdProgress, setHoldProgress] = useState(0);
-  const progressTimer = useRef(null);
-  const HOLD_MS = 700;
-
-  const startHold = (e) => {
-    e.preventDefault();
-    setHolding(true);
-    setHoldProgress(0);
-    const start = Date.now();
-    progressTimer.current = setInterval(() => {
-      const p = Math.min((Date.now() - start) / HOLD_MS, 1);
-      setHoldProgress(p);
-    }, 16);
-    holdTimer.current = setTimeout(() => {
-      clearInterval(progressTimer.current);
-      setHolding(false);
-      setHoldProgress(0);
-      onSaveLocal();
-    }, HOLD_MS);
-  };
-
-  const cancelHold = () => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      clearInterval(progressTimer.current);
-      if (holdProgress < 1) {
-        setHolding(false);
-        setHoldProgress(0);
-        onSaveCloud();
-      }
-    }
-  };
-
-  const circumference = 2 * Math.PI * 20;
-
-  return (
-    <button
-      onMouseDown={startHold}
-      onMouseUp={cancelHold}
-      onMouseLeave={() => {
-        if (holding) {
-          clearTimeout(holdTimer.current);
-          clearInterval(progressTimer.current);
-          setHolding(false);
-          setHoldProgress(0);
-        }
-      }}
-      onTouchStart={startHold}
-      onTouchEnd={cancelHold}
-      style={{
-        flex: 1, padding: "14px 0", borderRadius: 14,
-        background: holding ? `${BRAND.yellow}22` : BRAND.card,
-        border: `1px solid ${holding ? BRAND.yellow : BRAND.border}`,
-        color: BRAND.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
-        fontFamily: "'DM Sans', sans-serif",
-        display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", gap: 4, position: "relative",
-        transition: "background 0.15s, border-color 0.15s",
-        userSelect: "none", WebkitUserSelect: "none",
-        minHeight: 56,
-      }}
-    >
-      {holding ? (
-        <>
-          <svg width={44} height={44} style={{ position: "absolute" }}>
-            <circle cx={22} cy={22} r={20} fill="none"
-              stroke={BRAND.border} strokeWidth={2.5} />
-            <circle cx={22} cy={22} r={20} fill="none"
-              stroke={BRAND.yellow} strokeWidth={2.5}
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - holdProgress)}
-              strokeLinecap="round"
-              transform="rotate(-90 22 22)"
-              style={{ transition: "stroke-dashoffset 0.016s linear" }}
-            />
-          </svg>
-          <HardDrive size={14} color={BRAND.yellow} strokeWidth={2} style={{ position: "relative", zIndex: 1 }} />
-          <span style={{ fontSize: 9, color: BRAND.yellow, position: "relative", zIndex: 1, letterSpacing: "0.03em" }}>LOCAL</span>
-        </>
-      ) : (
-        <>
-          <Cloud size={16} color={BRAND.muted} strokeWidth={1.8} />
-          <span style={{ fontSize: 10, color: BRAND.muted, letterSpacing: "0.03em" }}>save</span>
-        </>
-      )}
-    </button>
-  );
-}
-
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function SnipChat() {
-  const videoRef  = useRef(null);
+  const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
-  const animRef   = useRef(null);
+  const animRef = useRef(null);
 
-  const [camState,     setCamState]     = useState(CAM_STATE.IDLE);
+  const [camState, setCamState] = useState(CAM_STATE.IDLE);
   const [activeFilter, setActiveFilter] = useState("normal");
-  const [facingMode,   setFacingMode]   = useState("user");
-  const [captured,     setCaptured]     = useState(null);
-  const [flash,        setFlash]        = useState(false);
-  const [timerCount,   setTimerCount]   = useState(null);
-  const [pressing,     setPressing]     = useState(false);
-  const [showChat,     setShowChat]     = useState(false);
-  const [messages,     setMessages]     = useState([]);
-  const [chatInput,    setChatInput]    = useState("");
-  const [viewingSnip,  setViewingSnip]  = useState(null);
+  const [facingMode, setFacingMode] = useState("user");
+  const [captured, setCaptured] = useState(null);
+  const [flash, setFlash] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [viewingSnip, setViewingSnip] = useState(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const { toasts, toast } = useToast();
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
@@ -443,39 +315,32 @@ export default function SnipChat() {
         await videoRef.current.play();
       }
       setCamState(CAM_STATE.GRANTED);
-      toast("Camera's ready! 📸", { icon: "🎥", type: "success", subMessage: "You look great today" });
     } catch (err) {
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setCamState(CAM_STATE.DENIED);
-      } else {
-        setCamState(CAM_STATE.ERROR);
-      }
+      setCamState(CAM_STATE.DENIED);
     }
-  }, [facingMode, toast]);
+  }, [facingMode]);
 
   useEffect(() => { startCamera(); }, [startCamera]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessages(prev => {
-        const filtered = prev.filter(msg => msg.expires > Date.now());
-        return filtered.length !== prev.length ? filtered : prev;
-      });
+      setMessages(prev => prev.filter(msg => msg.expires > Date.now()));
     }, 1000);
     return () => clearInterval(interval);
   }, []);
 
+  // Draw loop
   useEffect(() => {
     if (camState !== CAM_STATE.GRANTED) return;
     const draw = () => {
-      const video  = videoRef.current;
+      const video = videoRef.current;
       const canvas = canvasRef.current;
       if (video && canvas && video.readyState >= 2) {
         const ctx = canvas.getContext("2d");
         const { videoWidth: vw, videoHeight: vh } = video;
         const side = Math.min(vw, vh);
         const sx = (vw - side) / 2, sy = (vh - side) / 2;
-        ctx.filter = currentFilter.css;
+        ctx.filter = currentFilter?.css || "none";
         if (facingMode === "user") {
           ctx.save(); ctx.scale(-1, 1);
           ctx.drawImage(video, sx, sy, side, side, -canvas.width, 0, canvas.width, canvas.height);
@@ -497,69 +362,21 @@ export default function SnipChat() {
     };
   }, []);
 
-  const doCapture = () => {
+  const handleCapture = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     setFlash(true);
-    setTimeout(() => setFlash(false), 300);
-    setCaptured(canvas.toDataURL("image/png"));
-    toast("Got it! 🎬", { icon: "✨", type: "info", subMessage: "Now add a caption or send it" });
-  };
-
-  const handleCapture = () => { if (timerCount === null) doCapture(); };
-
-  const startTimer = () => {
-    if (timerCount !== null) return;
-    toast("3... 2... 1... smile! 😁", { icon: "⏱️", type: "info", duration: 2500 });
-    let count = 3;
-    setTimerCount(count);
-    const iv = setInterval(() => {
-      count--;
-      if (count === 0) { clearInterval(iv); setTimerCount(null); doCapture(); }
-      else setTimerCount(count);
-    }, 1000);
+    setTimeout(() => setFlash(false), 200);
+    const imageData = canvas.toDataURL("image/png");
+    setCaptured(imageData);
+    toast("Snap saved!", { icon: "📸" });
   };
 
   const flipCamera = () => {
     const next = facingMode === "user" ? "environment" : "user";
     setFacingMode(next);
     startCamera(next);
-    toast(next === "user" ? "Back to you! 🤳" : "Looking outside! 🌍", { icon: "🔄", type: "info", duration: 1500 });
-  };
-
-  // Save to SnipCloud (localStorage)
-  const saveToCloud = () => {
-    if (!captured) return;
-    try {
-      const existing = JSON.parse(localStorage.getItem("snipcloud") || "[]");
-      const entry = {
-        id: Date.now(),
-        image: captured,
-        caption: chatInput,
-        filter: activeFilter,
-        time: Date.now(),
-      };
-      existing.unshift(entry);
-      localStorage.setItem("snipcloud", JSON.stringify(existing.slice(0, 20)));
-      toast("Saved to your cloud! ☁️", { icon: "☁️", type: "success", subMessage: "You can find it anytime" });
-    } catch {
-      toast("Oops, cloud save failed 😅", { icon: "💔", type: "error", subMessage: "Try again?" });
-    }
-  };
-
-  // Save to local device
-  const saveToLocal = () => {
-    if (!captured) return;
-    try {
-      const a = document.createElement("a");
-      a.href = captured;
-      const filename = `snipchat/snip-${Date.now()}.png`;
-      a.download = filename;
-      a.click();
-      toast("Saved to your device! 💾", { icon: "📁", type: "success", subMessage: "Check your SnipChat folder" });
-    } catch {
-      toast("Couldn't save locally 😢", { icon: "❌", type: "error" });
-    }
+    toast(next === "user" ? "Front camera" : "Back camera", { icon: "🔄" });
   };
 
   const sendSnip = () => {
@@ -576,7 +393,7 @@ export default function SnipChat() {
     setChatInput("");
     setCaptured(null);
     setShowChat(true);
-    toast("Snip sent! ✈️", { icon: "💌", type: "success", subMessage: "Your friend will see it soon" });
+    toast("Sent!", { icon: "✈️" });
   };
 
   const viewSnip = (msg) => {
@@ -584,266 +401,184 @@ export default function SnipChat() {
     setMessages(prev => prev.map(m =>
       m.id === msg.id ? { ...m, viewed: true, expires: Date.now() + 5000 } : m
     ));
-    toast("Here's your snip! 👀", { icon: "🔓", type: "info", subMessage: "It'll disappear in 5 seconds" });
   };
 
-  const closeViewer = useCallback(() => {
-    setViewingSnip(null);
-  }, []);
+  const closeViewer = useCallback(() => setViewingSnip(null), []);
 
   const showGate = camState !== CAM_STATE.GRANTED;
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
 
   return (
     <>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body, #root { height: 100%; background: #000; }
         ::-webkit-scrollbar { display: none; }
-        @keyframes pop {
-          0%   { transform: scale(1.5); opacity: 0.3; }
-          60%  { transform: scale(0.95); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
-        }
         @keyframes slideUp {
-          from { transform: translateY(40px); opacity: 0; }
-          to   { transform: translateY(0); opacity: 1; }
+          from { transform: translateY(100%); }
+          to { transform: translateY(0); }
         }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to   { opacity: 1; }
+        @keyframes toastPop {
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
         }
-        @keyframes toastSlide {
-          from { transform: translateY(30px) scale(0.95); opacity: 0; }
-          to   { transform: translateY(0) scale(1); opacity: 1; }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
         }
       `}</style>
 
       <div style={{
-        width: "100%", maxWidth: 420, margin: "0 auto",
-        height: "100dvh", minHeight: 640,
-        display: "flex", flexDirection: "column",
-        background: BRAND.dark, fontFamily: "'DM Sans', sans-serif",
-        position: "relative", overflow: "hidden",
+        width: "100%", maxWidth: 450, margin: "0 auto",
+        height: "100dvh",
+        background: "#000",
+        position: "relative",
+        overflow: "hidden",
       }}>
         {showGate && <PermissionGate state={camState} onRequest={() => startCamera()} />}
 
-        {/* Human-friendly toast notifications */}
         <ToastContainer toasts={toasts} />
 
-        {/* Top bar */}
+        {/* Top bar - Snapchat style */}
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 18px 10px", zIndex: 10, flexShrink: 0,
+          position: "absolute", top: 0, left: 0, right: 0,
+          padding: "12px 16px",
+          display: "flex", justifyContent: "space-between",
+          alignItems: "center",
+          zIndex: 10,
+          background: "linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <SnipLogo size={34} />
-            <span style={{ fontSize: 20, fontWeight: 800, color: BRAND.text, letterSpacing: "-0.04em", fontFamily: "'DM Sans', sans-serif" }}>
-              Snip<span style={{ color: BRAND.yellow }}>Chat</span>
-            </span>
+          <div style={{ display: "flex", gap: 16 }}>
+            <SnipLogo size={28} />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 16 }}>
             <button onClick={() => setShowChat(true)} style={{
-              background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
-              borderRadius: "50%", width: 38, height: 38,
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: "none", border: "none", cursor: "pointer",
               position: "relative",
             }}>
-              <MessageCircle size={17} color={BRAND.muted} strokeWidth={1.8} />
+              <MessageCircle size={22} color="#FFF" strokeWidth={1.5} />
               {unviewedCount > 0 && (
                 <span style={{
-                  position: "absolute", top: -4, right: -4,
-                  background: BRAND.yellow, color: BRAND.dark,
-                  borderRadius: 10, padding: "2px 6px", fontSize: 10, fontWeight: 800,
+                  position: "absolute", top: -6, right: -8,
+                  background: BRAND.red, color: "#FFF",
+                  borderRadius: 10, padding: "2px 6px", fontSize: 10, fontWeight: 700,
                 }}>
                   {unviewedCount}
                 </span>
               )}
             </button>
             <button style={{
-              background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
-              borderRadius: "50%", width: 38, height: 38,
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              background: "none", border: "none", cursor: "pointer",
             }}>
-              <User size={17} color={BRAND.muted} strokeWidth={1.8} />
+              <Zap size={22} color="#FFF" strokeWidth={1.5} />
             </button>
           </div>
         </div>
 
-        {/* Viewfinder */}
+        {/* Camera viewfinder */}
         <div style={{
-          flex: 1, position: "relative", overflow: "hidden",
-          borderRadius: 20, margin: "0 12px", background: "#000",
+          position: "absolute", inset: 0,
+          overflow: "hidden",
         }}>
           <video ref={videoRef} playsInline muted style={{ display: "none" }} />
           <canvas ref={canvasRef} width={800} height={800}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+
+          {/* Flash overlay */}
           <div style={{
-            position: "absolute", inset: 0, background: "#fff",
-            opacity: flash ? 1 : 0, transition: "opacity 0.25s ease",
-            pointerEvents: "none", borderRadius: 20,
+            position: "absolute", inset: 0, background: "#FFF",
+            opacity: flash ? 1 : 0, transition: "opacity 0.15s ease",
+            pointerEvents: "none",
           }} />
-          {activeFilter !== "normal" && camState === CAM_STATE.GRANTED && (
-            <div style={{
-              position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)",
-              background: `${BRAND.dark}CC`, backdropFilter: "blur(8px)",
-              borderRadius: 20, padding: "4px 14px",
-              fontSize: 11, fontWeight: 700, color: BRAND.yellow,
-              letterSpacing: "0.08em", textTransform: "uppercase",
-              border: `1px solid ${BRAND.yellow}44`,
-              fontFamily: "'DM Sans', sans-serif",
-            }}>
-              {currentFilter.label}
-            </div>
-          )}
-          {timerCount !== null && (
-            <div style={{
-              position: "absolute", inset: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              pointerEvents: "none",
-            }}>
-              <span key={timerCount} style={{
-                fontSize: 100, fontWeight: 900, color: BRAND.yellow,
-                textShadow: `0 0 40px ${BRAND.yellow}`,
-                animation: "pop 1s ease-in-out",
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                {timerCount}
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* Bottom controls */}
-        <div style={{ flexShrink: 0, paddingBottom: 20 }}>
-          <div style={{
-            display: "flex", gap: 10, overflowX: "auto",
-            padding: "12px 16px 6px", scrollbarWidth: "none",
+        {/* Filter carousel (shows on tap/hold) */}
+        {showFilters && camState === CAM_STATE.GRANTED && (
+          <FilterCarousel
+            filters={FILTERS}
+            activeId={activeFilter}
+            onSelect={setActiveFilter}
+            videoRef={videoRef}
+          />
+        )}
+
+        {/* Bottom controls - Snapchat style */}
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0,
+          padding: "20px 24px 40px",
+          background: "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          zIndex: 10,
+        }}>
+          <button onClick={() => setShowFilters(!showFilters)} style={{
+            background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 30,
+            width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", backdropFilter: "blur(10px)",
           }}>
-            {FILTERS.map(f => (
-              <FilterPill key={f.id} filter={f} active={activeFilter === f.id}
-                onClick={() => setActiveFilter(f.id)} videoRef={videoRef} />
-            ))}
-          </div>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            gap: 32, padding: "10px 24px 4px",
+            <Sparkles size={20} color="#FFF" />
+          </button>
+
+          <button
+            onClick={handleCapture}
+            style={{
+              width: 72, height: 72, borderRadius: "50%",
+              background: "#FFF", border: "3px solid rgba(255,255,255,0.3)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "transform 0.1s ease",
+            }}
+          />
+
+          <button onClick={flipCamera} style={{
+            background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 30,
+            width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", backdropFilter: "blur(10px)",
           }}>
-            <button onClick={startTimer} style={{
-              width: 48, height: 48, borderRadius: "50%",
-              background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Timer size={20} color={BRAND.muted} strokeWidth={1.8} />
-            </button>
-            <button
-              onClick={handleCapture}
-              onMouseDown={() => setPressing(true)}
-              onMouseUp={() => setPressing(false)}
-              onMouseLeave={() => setPressing(false)}
-              onTouchStart={() => setPressing(true)}
-              onTouchEnd={() => { setPressing(false); handleCapture(); }}
-              style={{
-                width: 76, height: 76, borderRadius: "50%",
-                background: BRAND.text, border: `4px solid ${BRAND.yellow}`,
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                boxShadow: `0 0 24px ${BRAND.yellow}55, 0 4px 20px #00000080`,
-                transform: pressing ? "scale(0.92)" : "scale(1)",
-                transition: "transform 0.1s ease",
-              }}
-            >
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: BRAND.yellow }} />
-            </button>
-            <button onClick={flipCamera} style={{
-              width: 48, height: 48, borderRadius: "50%",
-              background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <RefreshCw size={20} color={BRAND.muted} strokeWidth={1.8} />
-            </button>
-          </div>
+            <RefreshCw size={20} color="#FFF" />
+          </button>
         </div>
 
-        {/* Captured preview */}
+        {/* Preview/Send screen */}
         {captured && (
           <div style={{
             position: "absolute", inset: 0, zIndex: 50,
-            background: BRAND.dark, display: "flex", flexDirection: "column",
-            animation: "slideUp 0.25s ease",
+            background: "#000", display: "flex", flexDirection: "column",
+            animation: "slideUp 0.3s ease",
           }}>
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "14px 18px 10px",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <SnipLogo size={28} />
-                <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text, letterSpacing: "-0.04em", fontFamily: "'DM Sans', sans-serif" }}>
-                  Your <span style={{ color: BRAND.yellow }}>Snip</span>
-                </span>
-              </div>
-              <span style={{
-                color: BRAND.muted, fontSize: 11, fontWeight: 700,
-                letterSpacing: "0.08em", textTransform: "uppercase",
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                {currentFilter.label}
-              </span>
-            </div>
-
-            <img src={captured} alt="Captured"
-              style={{ flex: 1, objectFit: "cover", borderRadius: 20, margin: 12 }} />
-
-            <div style={{ padding: "0 20px", marginBottom: 12 }}>
+            <img src={captured} alt="preview" style={{
+              flex: 1, objectFit: "cover", width: "100%",
+            }} />
+            
+            <div style={{ padding: 20, background: "#000" }}>
               <input
                 type="text"
-                placeholder="Add a caption..."
+                placeholder="Add caption..."
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 style={{
-                  width: "100%", background: BRAND.card, border: `1px solid ${BRAND.border}`,
-                  borderRadius: 24, padding: "12px 16px", color: BRAND.text,
-                  fontSize: 14, outline: "none", fontFamily: "'DM Sans', sans-serif",
+                  width: "100%", background: "#1A1A1A", border: "none",
+                  borderRadius: 30, padding: "14px 20px", color: "#FFF",
+                  fontSize: 16, outline: "none",
                 }}
-                onFocus={() => toast("Say something nice! 💭", { icon: "✏️", type: "info", duration: 2000 })}
+                autoFocus
               />
-            </div>
-
-            <div style={{ display: "flex", gap: 10, padding: "8px 20px 24px" }}>
-              {/* Retake */}
-              <button onClick={() => { setCaptured(null); setChatInput(""); toast("Let's try again! 🔄", { icon: "🎬", type: "info", duration: 1500 }); }} style={{
-                flex: 1, padding: "14px 0", borderRadius: 14,
-                background: BRAND.card, border: `1px solid ${BRAND.border}`,
-                color: BRAND.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              }}>
-                <X size={15} color={BRAND.text} strokeWidth={2} />
-                retake
-              </button>
-
-              {/* Send snip */}
-              <button onClick={sendSnip} style={{
-                flex: 1.4, padding: "14px 0", borderRadius: 14,
-                background: BRAND.yellow, border: "none",
-                color: BRAND.dark, fontWeight: 800, fontSize: 14, cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-              }}>
-                <Send size={15} color={BRAND.dark} strokeWidth={2} />
-                send snip
-              </button>
-
-              {/* Save — tap = cloud, hold = local */}
-              <SaveButton onSaveCloud={saveToCloud} onSaveLocal={saveToLocal} />
-            </div>
-
-            <div style={{
-              textAlign: "center", fontSize: 11, color: BRAND.muted,
-              paddingBottom: 10, paddingTop: 0,
-              fontFamily: "'DM Sans', sans-serif",
-            }}>
-              💡 tap <strong style={{ color: BRAND.text }}>save</strong> → cloud &nbsp;·&nbsp; hold → my phone
+              
+              <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+                <button onClick={() => setCaptured(null)} style={{
+                  flex: 1, padding: "14px", borderRadius: 30,
+                  background: "#2C2C2C", border: "none",
+                  color: "#FFF", fontWeight: 600, cursor: "pointer",
+                }}>
+                  Retake
+                </button>
+                <button onClick={sendSnip} style={{
+                  flex: 1, padding: "14px", borderRadius: 30,
+                  background: BRAND.yellow, border: "none",
+                  color: "#000", fontWeight: 700, cursor: "pointer",
+                }}>
+                  Send to →
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -857,10 +592,21 @@ export default function SnipChat() {
         )}
 
         {viewingSnip && (
-          <SnipViewer
-            snip={viewingSnip}
-            onClose={closeViewer}
-          />
+          <SnipViewer snip={viewingSnip} onClose={closeViewer} />
+        )}
+
+        {/* Hint text - Snapchat style */}
+        {camState === CAM_STATE.GRANTED && !captured && (
+          <div style={{
+            position: "absolute", bottom: 120, left: 0, right: 0,
+            textAlign: "center",
+            color: "rgba(255,255,255,0.6)",
+            fontSize: 12,
+            pointerEvents: "none",
+            zIndex: 10,
+          }}>
+            Tap to capture • Hold for filters
+          </div>
         )}
       </div>
     </>
