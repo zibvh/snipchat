@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Eye } from "lucide-react";
+import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Eye, Cloud, FolderDown } from "lucide-react";
 
 const BRAND = {
   yellow: "#FFE036",
@@ -24,6 +24,72 @@ const FILTERS = [
 ];
 
 const CAM_STATE = { IDLE: "idle", ASKING: "asking", GRANTED: "granted", DENIED: "denied", ERROR: "error" };
+
+// SnipCloud storage (simulated cloud)
+let snipCloudStorage = [];
+
+// Load saved snips from localStorage on init
+const loadSnipCloud = () => {
+  const saved = localStorage.getItem("snipcloud_snips");
+  if (saved) {
+    try {
+      snipCloudStorage = JSON.parse(saved);
+    } catch(e) { console.error(e); }
+  }
+};
+loadSnipCloud();
+
+const saveToSnipCloud = (imageData, caption, filterName) => {
+  const snip = {
+    id: Date.now(),
+    image: imageData,
+    caption: caption,
+    filter: filterName,
+    timestamp: Date.now(),
+    date: new Date().toLocaleString()
+  };
+  snipCloudStorage.unshift(snip);
+  // Keep only last 50 snips in cloud
+  if (snipCloudStorage.length > 50) snipCloudStorage.pop();
+  localStorage.setItem("snipcloud_snips", JSON.stringify(snipCloudStorage));
+  return snip;
+};
+
+const saveToLocalDevice = async (imageData, filename) => {
+  try {
+    // Convert base64 to blob
+    const response = await fetch(imageData);
+    const blob = await response.blob();
+    
+    // Check if File System Access API is supported (modern browsers)
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await window.showDirectoryPicker();
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return { success: true, path: dirHandle.name + '/' + filename };
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.log('Directory picker cancelled or failed, falling back to download');
+        }
+      }
+    }
+    
+    // Fallback: traditional download
+    const link = document.createElement('a');
+    link.href = imageData;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return { success: true, path: 'Downloads/' + filename };
+  } catch (error) {
+    console.error('Save failed:', error);
+    return { success: false, error: error.message };
+  }
+};
 
 function SnipLogo({ size = 32 }) {
   return (
@@ -210,7 +276,6 @@ const ChatOverlay = memo(({ messages, onClose, onViewsnip }) => {
 // snip Viewer as separate component
 const snipViewer = memo(({ snip, onClose }) => {
   useEffect(() => {
-    // Auto-close after 5 seconds (like real snipchat)
     const timer = setTimeout(onClose, 5000);
     return () => clearTimeout(timer);
   }, [onClose]);
@@ -253,23 +318,87 @@ const snipViewer = memo(({ snip, onClose }) => {
   );
 });
 
+// SnipCloud Gallery Component
+const SnipCloudGallery = memo(({ snips, onClose }) => {
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 80,
+      background: BRAND.dark, display: "flex", flexDirection: "column",
+      animation: "slideUp 0.25s ease",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
+      }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
+          ☁️ SnipCloud <span style={{ fontSize: 12, color: BRAND.muted }}>({snips.length} saved)</span>
+        </span>
+        <button onClick={onClose} style={{
+          background: BRAND.card, border: "none", borderRadius: 30,
+          padding: 8, cursor: "pointer",
+        }}>
+          <X size={18} color={BRAND.text} />
+        </button>
+      </div>
+      
+      <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        {snips.length === 0 ? (
+          <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
+            No snips in the cloud yet. Take and save a photo!
+          </p>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {snips.map((snip) => (
+              <div key={snip.id} style={{
+                background: BRAND.card, borderRadius: 12, overflow: "hidden",
+                border: `1px solid ${BRAND.border}`,
+              }}>
+                <img src={snip.image} alt="snip" style={{
+                  width: "100%", aspectRatio: "1/1", objectFit: "cover",
+                }} />
+                <div style={{ padding: 8 }}>
+                  {snip.caption && (
+                    <div style={{ color: BRAND.text, fontSize: 11, marginBottom: 4 }}>
+                      💬 {snip.caption}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 9, color: BRAND.muted }}>
+                    {snip.date}
+                  </div>
+                  {snip.filter !== "normal" && (
+                    <div style={{ fontSize: 9, color: BRAND.yellow, marginTop: 4 }}>
+                      🎨 {snip.filter}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 export default function SnipChat() {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const animRef   = useRef(null);
 
-  const [camState,     setCamState]     = useState(CAM_STATE.IDLE);
-  const [activeFilter, setActiveFilter] = useState("normal");
-  const [facingMode,   setFacingMode]   = useState("user");
-  const [captured,     setCaptured]     = useState(null);
-  const [flash,        setFlash]        = useState(false);
-  const [timerCount,   setTimerCount]   = useState(null);
-  const [pressing,     setPressing]     = useState(false);
-  const [showChat,     setShowChat]     = useState(false);
-  const [messages,     setMessages]     = useState([]);
-  const [chatInput,    setChatInput]    = useState("");
-  const [viewingsnip,  setViewingsnip]  = useState(null);
+  const [camState,         setCamState]     = useState(CAM_STATE.IDLE);
+  const [activeFilter,     setActiveFilter] = useState("normal");
+  const [facingMode,       setFacingMode]   = useState("user");
+  const [captured,         setCaptured]     = useState(null);
+  const [flash,            setFlash]        = useState(false);
+  const [timerCount,       setTimerCount]   = useState(null);
+  const [pressing,         setPressing]     = useState(false);
+  const [showChat,         setShowChat]     = useState(false);
+  const [messages,         setMessages]     = useState([]);
+  const [chatInput,        setChatInput]    = useState("");
+  const [viewingsnip,      setViewingsnip]  = useState(null);
+  const [showCloudGallery, setShowCloudGallery] = useState(false);
+  const [saveFeedback,     setSaveFeedback] = useState(null);
 
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
 
@@ -301,15 +430,12 @@ export default function SnipChat() {
     startCamera();
   }, [startCamera]);
 
-  // Auto-expire messages - fixed to not cause excessive re-renders
+  // Auto-expire messages
   useEffect(() => {
     const interval = setInterval(() => {
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.expires > Date.now());
-        // Only update if something changed
-        if (filtered.length !== prev.length) {
-          return filtered;
-        }
+        if (filtered.length !== prev.length) return filtered;
         return prev;
       });
     }, 1000);
@@ -349,6 +475,11 @@ export default function SnipChat() {
     };
   }, []);
 
+  const showFeedback = (message, isError = false) => {
+    setSaveFeedback({ message, isError });
+    setTimeout(() => setSaveFeedback(null), 2000);
+  };
+
   const doCapture = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -376,16 +507,59 @@ export default function SnipChat() {
     startCamera(next);
   };
 
-  const downloadSnip = () => {
+  // Save to SnipCloud (tap)
+  const saveToCloud = () => {
     if (!captured) return;
-    const a = document.createElement("a");
-    a.href = captured;
-    a.download = `snipchat-${Date.now()}.png`;
-    a.click();
+    saveToSnipCloud(captured, chatInput, currentFilter.label);
+    showFeedback("☁️ Saved to SnipCloud!");
+    setCaptured(null);
+    setChatInput("");
+  };
+
+  // Save to local device (press & hold)
+  const saveToLocal = async () => {
+    if (!captured) return;
+    const filename = `snipchat/snip-${Date.now()}.png`;
+    const result = await saveToLocalDevice(captured, filename);
+    if (result.success) {
+      showFeedback(`💾 Saved to ${result.path}`);
+    } else {
+      showFeedback(`❌ Save failed: ${result.error}`, true);
+    }
+    setCaptured(null);
+    setChatInput("");
+  };
+
+  const handleSavePress = (e) => {
+    // For mouse events
+    let timer;
+    const startPress = () => {
+      timer = setTimeout(() => {
+        saveToLocal();
+      }, 500);
+    };
+    const endPress = () => {
+      clearTimeout(timer);
+    };
+    
+    if (e.type === 'mousedown') startPress();
+    if (e.type === 'mouseup' || e.type === 'mouseleave') endPress();
+    
+    // For touch events
+    if (e.type === 'touchstart') {
+      e.preventDefault();
+      startPress();
+    }
+    if (e.type === 'touchend') {
+      e.preventDefault();
+      endPress();
+    }
   };
 
   const sendsnip = () => {
     if (!captured) return;
+    // Also save to cloud when sending
+    saveToSnipCloud(captured, chatInput, currentFilter.label);
     const newMsg = {
       id: Date.now(),
       image: captured,
@@ -398,6 +572,7 @@ export default function SnipChat() {
     setChatInput("");
     setCaptured(null);
     setShowChat(true);
+    showFeedback("📨 Snip sent! (also saved to SnipCloud)");
   };
 
   const viewsnip = (msg) => {
@@ -413,6 +588,7 @@ export default function SnipChat() {
 
   const showGate = camState !== CAM_STATE.GRANTED;
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
+  const cloudSnips = snipCloudStorage;
 
   return (
     <>
@@ -434,6 +610,10 @@ export default function SnipChat() {
           from { opacity: 0; }
           to   { opacity: 1; }
         }
+        @keyframes toastPop {
+          0% { transform: translateY(20px) scale(0.9); opacity: 0; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
       `}</style>
 
       <div style={{
@@ -444,6 +624,20 @@ export default function SnipChat() {
         position: "relative", overflow: "hidden",
       }}>
         {showGate && <PermissionGate state={camState} onRequest={() => startCamera()} />}
+
+        {/* Toast Feedback */}
+        {saveFeedback && (
+          <div style={{
+            position: "absolute", bottom: 120, left: 20, right: 20, zIndex: 200,
+            background: saveFeedback.isError ? "#E53935" : BRAND.yellow,
+            color: saveFeedback.isError ? "#fff" : BRAND.dark,
+            padding: "12px 20px", borderRadius: 30, textAlign: "center",
+            fontWeight: 600, fontSize: 14, animation: "toastPop 0.2s ease",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+          }}>
+            {saveFeedback.message}
+          </div>
+        )}
 
         {/* Top bar */}
         <div style={{
@@ -457,6 +651,23 @@ export default function SnipChat() {
             </span>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setShowCloudGallery(true)} style={{
+              background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
+              borderRadius: "50%", width: 38, height: 38,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+              position: "relative",
+            }}>
+              <Cloud size={17} color={BRAND.muted} strokeWidth={1.8} />
+              {cloudSnips.length > 0 && (
+                <span style={{
+                  position: "absolute", top: -4, right: -4,
+                  background: BRAND.yellow, color: BRAND.dark,
+                  borderRadius: 10, padding: "2px 5px", fontSize: 9, fontWeight: 800,
+                }}>
+                  {cloudSnips.length}
+                </span>
+              )}
+            </button>
             <button onClick={() => setShowChat(true)} style={{
               background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
               borderRadius: "50%", width: 38, height: 38,
@@ -651,16 +862,29 @@ export default function SnipChat() {
                 <Send size={16} color={BRAND.dark} strokeWidth={2} />
                 Send snip
               </button>
-              <button onClick={downloadSnip} style={{
-                flex: 1, padding: "14px 0", borderRadius: 14,
-                background: BRAND.card, border: `1px solid ${BRAND.border}`,
-                color: BRAND.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
-                fontFamily: "'DM Sans', sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              }}>
-                <Download size={16} color={BRAND.text} strokeWidth={2} />
+              <button
+                onClick={saveToCloud}
+                onMouseDown={handleSavePress}
+                onMouseUp={handleSavePress}
+                onMouseLeave={handleSavePress}
+                onTouchStart={handleSavePress}
+                onTouchEnd={handleSavePress}
+                style={{
+                  flex: 1, padding: "14px 0", borderRadius: 14,
+                  background: BRAND.card, border: `1px solid ${BRAND.border}`,
+                  color: BRAND.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  transition: "all 0.1s",
+                }}
+                title="Tap: Save to SnipCloud | Hold: Save to device"
+              >
+                <FolderDown size={16} color={BRAND.text} strokeWidth={2} />
                 Save
               </button>
+            </div>
+            <div style={{ textAlign: "center", paddingBottom: 12, fontSize: 10, color: BRAND.muted }}>
+              💡 Tap Save → SnipCloud &nbsp;&nbsp;|&nbsp;&nbsp; Hold Save → Local device
             </div>
           </div>
         )}
@@ -677,6 +901,13 @@ export default function SnipChat() {
           <snipViewer 
             snip={viewingsnip}
             onClose={closeViewer}
+          />
+        )}
+
+        {showCloudGallery && (
+          <SnipCloudGallery
+            snips={cloudSnips}
+            onClose={() => setShowCloudGallery(false)}
           />
         )}
       </div>
