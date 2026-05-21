@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Eye } from "lucide-react";
+import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Cloud, HardDrive } from "lucide-react";
 
 const BRAND = {
   yellow: "#FFE036",
@@ -8,6 +8,8 @@ const BRAND = {
   border: "#2A2A3A",
   text:   "#F0F0FF",
   muted:  "#8888AA",
+  green:  "#36FFB0",
+  red:    "#FF4D6D",
 };
 
 const FILTERS = [
@@ -25,58 +27,51 @@ const FILTERS = [
 
 const CAM_STATE = { IDLE: "idle", ASKING: "asking", GRANTED: "granted", DENIED: "denied", ERROR: "error" };
 
-// SnipCloud storage (in-memory for demo - would be a backend in production)
-const SnipCloud = {
-  snips: [],
-  
-  saveSnip(snipData) {
-    const newSnip = {
-      id: Date.now(),
-      image: snipData,
-      timestamp: new Date().toISOString(),
-      views: 0
-    };
-    this.snips.unshift(newSnip);
-    // Keep only last 50 snips
-    if (this.snips.length > 50) this.snips = this.snips.slice(0, 50);
-    return newSnip;
-  },
-  
-  getSnips() {
-    return this.snips;
-  }
-};
-
-// Toast notification component
-const Toast = memo(({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 3000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
+// ─── Toast System ────────────────────────────────────────────────────────────
+function ToastContainer({ toasts }) {
   return (
     <div style={{
-      position: "fixed",
-      bottom: 100,
-      left: "50%",
-      transform: "translateX(-50%)",
-      background: type === "success" ? BRAND.yellow : type === "error" ? "#FF4444" : BRAND.card,
-      color: type === "success" ? BRAND.dark : BRAND.text,
-      padding: "12px 24px",
-      borderRadius: 40,
-      fontSize: 14,
-      fontWeight: 600,
-      zIndex: 200,
-      animation: "slideUp 0.3s ease",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-      whiteSpace: "nowrap",
-      fontFamily: "'DM Sans', sans-serif",
+      position: "absolute", top: 70, left: 12, right: 12,
+      zIndex: 200, display: "flex", flexDirection: "column", gap: 8,
+      pointerEvents: "none",
     }}>
-      {message}
+      {toasts.map(t => (
+        <div key={t.id} style={{
+          background: t.type === "success" ? `${BRAND.green}22`
+                    : t.type === "error"   ? `${BRAND.red}22`
+                    : `${BRAND.yellow}22`,
+          border: `1px solid ${
+            t.type === "success" ? BRAND.green
+          : t.type === "error"   ? BRAND.red
+          : BRAND.yellow}88`,
+          borderRadius: 14,
+          padding: "10px 16px",
+          display: "flex", alignItems: "center", gap: 10,
+          backdropFilter: "blur(12px)",
+          animation: "toastIn 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+          fontFamily: "'DM Sans', sans-serif",
+        }}>
+          <span style={{ fontSize: 18 }}>{t.icon}</span>
+          <span style={{
+            color: BRAND.text, fontSize: 13, fontWeight: 600, lineHeight: 1.4,
+          }}>{t.message}</span>
+        </div>
+      ))}
     </div>
   );
-});
+}
 
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const toast = useCallback((message, { icon = "✨", type = "info", duration = 2800 } = {}) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, icon, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+  }, []);
+  return { toasts, toast };
+}
+
+// ─── Logo ─────────────────────────────────────────────────────────────────────
 function SnipLogo({ size = 32 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
@@ -91,6 +86,7 @@ function SnipLogo({ size = 32 }) {
   );
 }
 
+// ─── Filter Pill ──────────────────────────────────────────────────────────────
 function FilterPill({ filter, active, onClick, videoRef }) {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -134,9 +130,9 @@ function FilterPill({ filter, active, onClick, videoRef }) {
   );
 }
 
+// ─── Permission Gate ──────────────────────────────────────────────────────────
 function PermissionGate({ state, onRequest }) {
   const isAsking = state === CAM_STATE.ASKING;
-
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 100,
@@ -146,7 +142,6 @@ function PermissionGate({ state, onRequest }) {
       fontFamily: "'DM Sans', sans-serif",
     }}>
       <SnipLogo size={64} />
-
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <h1 style={{ fontSize: 26, fontWeight: 900, color: BRAND.text, letterSpacing: "-0.04em" }}>
           Snip<span style={{ color: BRAND.yellow }}>Chat</span>
@@ -159,7 +154,6 @@ function PermissionGate({ state, onRequest }) {
             : "SnipChat needs camera access to work. Your camera is never recorded or uploaded."}
         </p>
       </div>
-
       {state === CAM_STATE.DENIED && (
         <div style={{
           background: BRAND.card, border: `1px solid ${BRAND.border}`,
@@ -167,30 +161,24 @@ function PermissionGate({ state, onRequest }) {
           fontSize: 13, color: BRAND.muted, lineHeight: 1.7, maxWidth: 300,
         }}>
           <strong style={{ color: BRAND.text, display: "block", marginBottom: 6 }}>How to fix it:</strong>
-          Tap the <strong style={{ color: BRAND.yellow }}>lock icon</strong> or <strong style={{ color: BRAND.yellow }}>info icon</strong> in your browser address bar
-          {" "}→ Site settings → Camera → Allow
+          Tap the <strong style={{ color: BRAND.yellow }}>lock icon</strong> or <strong style={{ color: BRAND.yellow }}>info icon</strong>{" "}
+          in your browser address bar → Site settings → Camera → Allow
         </div>
       )}
-
-      <button
-        onClick={onRequest}
-        disabled={isAsking}
-        style={{
-          padding: "16px 40px", borderRadius: 16,
-          background: isAsking ? BRAND.border : BRAND.yellow,
-          border: "none", color: BRAND.dark,
-          fontWeight: 800, fontSize: 16, cursor: isAsking ? "default" : "pointer",
-          fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em",
-          display: "flex", alignItems: "center", gap: 10,
-          transition: "background 0.2s, transform 0.1s",
-          transform: isAsking ? "scale(0.97)" : "scale(1)",
-          minWidth: 200, justifyContent: "center",
-        }}
-      >
+      <button onClick={onRequest} disabled={isAsking} style={{
+        padding: "16px 40px", borderRadius: 16,
+        background: isAsking ? BRAND.border : BRAND.yellow,
+        border: "none", color: BRAND.dark,
+        fontWeight: 800, fontSize: 16, cursor: isAsking ? "default" : "pointer",
+        fontFamily: "'DM Sans', sans-serif", letterSpacing: "-0.02em",
+        display: "flex", alignItems: "center", gap: 10,
+        transition: "background 0.2s, transform 0.1s",
+        transform: isAsking ? "scale(0.97)" : "scale(1)",
+        minWidth: 200, justifyContent: "center",
+      }}>
         <Camera size={20} color={isAsking ? BRAND.muted : BRAND.dark} strokeWidth={2} />
         {isAsking ? "Opening camera..." : state === CAM_STATE.DENIED || state === CAM_STATE.ERROR ? "Try Again" : "Allow Camera"}
       </button>
-
       <p style={{ fontSize: 11, color: BRAND.border, letterSpacing: "0.04em" }}>
         OPEN SOURCE · PRIVATE · NO ADS
       </p>
@@ -198,10 +186,9 @@ function PermissionGate({ state, onRequest }) {
   );
 }
 
-// Chat Overlay as separate component
+// ─── Chat Overlay ─────────────────────────────────────────────────────────────
 const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
-  
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 60,
@@ -213,7 +200,7 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
         padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
       }}>
         <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
-          💬 Snips {unviewedCount > 0 && `(${unviewedCount})`}
+          💬 snips {unviewedCount > 0 && `(${unviewedCount})`}
         </span>
         <button onClick={onClose} style={{
           background: BRAND.card, border: "none", borderRadius: 30,
@@ -222,7 +209,6 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
           <X size={18} color={BRAND.text} />
         </button>
       </div>
-      
       <div style={{ flex: 1, overflowY: "auto", padding: 16, gap: 12, display: "flex", flexDirection: "column" }}>
         {messages.length === 0 ? (
           <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
@@ -237,9 +223,9 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
             transition: "all 0.2s",
           }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-              <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
+              <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} alt="snip" />
               <div>
-                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 Snip"}</div>
+                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 snip"}</div>
                 <div style={{ color: BRAND.muted, fontSize: 10 }}>{new Date(msg.time).toLocaleTimeString()}</div>
               </div>
             </div>
@@ -249,17 +235,16 @@ const ChatOverlay = memo(({ messages, onClose, onViewSnip }) => {
           </div>
         ))}
       </div>
-      
       <div style={{ padding: 16, borderTop: `1px solid ${BRAND.border}` }}>
-        <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center", marginBottom: 8 }}>
-          Take a photo → Add caption → Send Snip!
+        <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center" }}>
+          Take a photo → Add caption → send snip!
         </p>
       </div>
     </div>
   );
 });
 
-// Snip Viewer as separate component
+// ─── Snip Viewer ──────────────────────────────────────────────────────────────
 const SnipViewer = memo(({ snip, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 5000);
@@ -267,7 +252,6 @@ const SnipViewer = memo(({ snip, onClose }) => {
   }, [onClose]);
 
   if (!snip) return null;
-
   return (
     <div style={{
       position: "absolute", inset: 0, zIndex: 70,
@@ -275,9 +259,7 @@ const SnipViewer = memo(({ snip, onClose }) => {
       alignItems: "center", justifyContent: "center",
       animation: "fadeIn 0.2s ease",
     }} onClick={onClose}>
-      <img src={snip.image} alt="Snip" style={{
-        width: "100%", height: "100%", objectFit: "contain",
-      }} />
+      <img src={snip.image} alt="snip" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
       {snip.text && (
         <div style={{
           position: "absolute", bottom: 100, left: 20, right: 20,
@@ -304,31 +286,120 @@ const SnipViewer = memo(({ snip, onClose }) => {
   );
 });
 
+// ─── Save Button with hold-to-save ────────────────────────────────────────────
+function SaveButton({ onSaveCloud, onSaveLocal }) {
+  const holdTimer = useRef(null);
+  const [holding, setHolding] = useState(false);
+  const [holdProgress, setHoldProgress] = useState(0);
+  const progressTimer = useRef(null);
+  const HOLD_MS = 700;
+
+  const startHold = (e) => {
+    e.preventDefault();
+    setHolding(true);
+    setHoldProgress(0);
+    const start = Date.now();
+    progressTimer.current = setInterval(() => {
+      const p = Math.min((Date.now() - start) / HOLD_MS, 1);
+      setHoldProgress(p);
+    }, 16);
+    holdTimer.current = setTimeout(() => {
+      clearInterval(progressTimer.current);
+      setHolding(false);
+      setHoldProgress(0);
+      onSaveLocal();
+    }, HOLD_MS);
+  };
+
+  const cancelHold = () => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      clearInterval(progressTimer.current);
+      if (holdProgress < 1) {
+        setHolding(false);
+        setHoldProgress(0);
+        onSaveCloud();
+      }
+    }
+  };
+
+  const circumference = 2 * Math.PI * 20;
+
+  return (
+    <button
+      onMouseDown={startHold}
+      onMouseUp={cancelHold}
+      onMouseLeave={() => {
+        if (holding) {
+          clearTimeout(holdTimer.current);
+          clearInterval(progressTimer.current);
+          setHolding(false);
+          setHoldProgress(0);
+        }
+      }}
+      onTouchStart={startHold}
+      onTouchEnd={cancelHold}
+      style={{
+        flex: 1, padding: "14px 0", borderRadius: 14,
+        background: holding ? `${BRAND.yellow}22` : BRAND.card,
+        border: `1px solid ${holding ? BRAND.yellow : BRAND.border}`,
+        color: BRAND.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
+        fontFamily: "'DM Sans', sans-serif",
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", gap: 4, position: "relative",
+        transition: "background 0.15s, border-color 0.15s",
+        userSelect: "none", WebkitUserSelect: "none",
+        minHeight: 56,
+      }}
+    >
+      {holding ? (
+        <>
+          <svg width={44} height={44} style={{ position: "absolute" }}>
+            <circle cx={22} cy={22} r={20} fill="none"
+              stroke={BRAND.border} strokeWidth={2.5} />
+            <circle cx={22} cy={22} r={20} fill="none"
+              stroke={BRAND.yellow} strokeWidth={2.5}
+              strokeDasharray={circumference}
+              strokeDashoffset={circumference * (1 - holdProgress)}
+              strokeLinecap="round"
+              transform="rotate(-90 22 22)"
+              style={{ transition: "stroke-dashoffset 0.016s linear" }}
+            />
+          </svg>
+          <HardDrive size={14} color={BRAND.yellow} strokeWidth={2} style={{ position: "relative", zIndex: 1 }} />
+          <span style={{ fontSize: 9, color: BRAND.yellow, position: "relative", zIndex: 1, letterSpacing: "0.03em" }}>LOCAL</span>
+        </>
+      ) : (
+        <>
+          <Cloud size={16} color={BRAND.muted} strokeWidth={1.8} />
+          <span style={{ fontSize: 10, color: BRAND.muted, letterSpacing: "0.03em" }}>save</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
 export default function SnipChat() {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const animRef   = useRef(null);
-  const savePressTimer = useRef(null);
 
-  const [camState,      setCamState]     = useState(CAM_STATE.IDLE);
-  const [activeFilter,  setActiveFilter] = useState("normal");
-  const [facingMode,    setFacingMode]   = useState("user");
-  const [captured,      setCaptured]     = useState(null);
-  const [flash,         setFlash]        = useState(false);
-  const [timerCount,    setTimerCount]   = useState(null);
-  const [pressing,      setPressing]     = useState(false);
-  const [showChat,      setShowChat]     = useState(false);
-  const [messages,      setMessages]     = useState([]);
-  const [chatInput,     setChatInput]    = useState("");
-  const [viewingSnip,   setViewingSnip]  = useState(null);
-  const [toast,         setToast]        = useState(null);
+  const [camState,     setCamState]     = useState(CAM_STATE.IDLE);
+  const [activeFilter, setActiveFilter] = useState("normal");
+  const [facingMode,   setFacingMode]   = useState("user");
+  const [captured,     setCaptured]     = useState(null);
+  const [flash,        setFlash]        = useState(false);
+  const [timerCount,   setTimerCount]   = useState(null);
+  const [pressing,     setPressing]     = useState(false);
+  const [showChat,     setShowChat]     = useState(false);
+  const [messages,     setMessages]     = useState([]);
+  const [chatInput,    setChatInput]    = useState("");
+  const [viewingSnip,  setViewingSnip]  = useState(null);
 
+  const { toasts, toast } = useToast();
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
-
-  const showToast = (message, type = "success") => {
-    setToast({ message, type });
-  };
 
   const startCamera = useCallback(async (mode) => {
     const m = mode ?? facingMode;
@@ -354,18 +425,13 @@ export default function SnipChat() {
     }
   }, [facingMode]);
 
-  useEffect(() => {
-    startCamera();
-  }, [startCamera]);
+  useEffect(() => { startCamera(); }, [startCamera]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.expires > Date.now());
-        if (filtered.length !== prev.length) {
-          return filtered;
-        }
-        return prev;
+        return filtered.length !== prev.length ? filtered : prev;
       });
     }, 1000);
     return () => clearInterval(interval);
@@ -409,12 +475,14 @@ export default function SnipChat() {
     setFlash(true);
     setTimeout(() => setFlash(false), 300);
     setCaptured(canvas.toDataURL("image/png"));
+    toast("snip captured! ✂️", { icon: "📸", type: "info" });
   };
 
   const handleCapture = () => { if (timerCount === null) doCapture(); };
 
   const startTimer = () => {
     if (timerCount !== null) return;
+    toast("timer started!", { icon: "⏱️", type: "info", duration: 1500 });
     let count = 3;
     setTimerCount(count);
     const iv = setInterval(() => {
@@ -428,57 +496,44 @@ export default function SnipChat() {
     const next = facingMode === "user" ? "environment" : "user";
     setFacingMode(next);
     startCamera(next);
+    toast("camera flipped", { icon: "🔄", type: "info", duration: 1500 });
   };
 
-  // Save to local storage (press and hold)
-  const saveToLocalStorage = useCallback(() => {
+  // Save to SnipCloud (localStorage)
+  const saveToCloud = () => {
     if (!captured) return;
-    
     try {
-      // Create a folder-like structure using indexedDB or just use localStorage with prefix
-      const snips = JSON.parse(localStorage.getItem("snipchat_snips") || "[]");
-      const newSnip = {
+      const existing = JSON.parse(localStorage.getItem("snipcloud") || "[]");
+      const entry = {
         id: Date.now(),
         image: captured,
-        filter: currentFilter.label,
-        timestamp: new Date().toISOString()
+        caption: chatInput,
+        filter: activeFilter,
+        time: Date.now(),
       };
-      snips.unshift(newSnip);
-      // Keep only last 100 snips
-      if (snips.length > 100) snips.pop();
-      localStorage.setItem("snipchat_snips", JSON.stringify(snips));
-      
-      showToast(`✨ Snip saved to your SnipChat folder! (${snips.length} total snips)`, "success");
-    } catch (err) {
-      showToast("❌ Failed to save snip locally", "error");
+      existing.unshift(entry);
+      // Keep last 20 snips
+      localStorage.setItem("snipcloud", JSON.stringify(existing.slice(0, 20)));
+      toast("saved to SnipCloud ☁️", { icon: "☁️", type: "success" });
+    } catch {
+      toast("couldn't save to SnipCloud", { icon: "❌", type: "error" });
     }
-  }, [captured, currentFilter]);
+  };
 
-  // Save to SnipCloud (regular click)
-  const saveToSnipCloud = useCallback(() => {
+  // Save to local device (download into snipchat folder)
+  const saveToLocal = () => {
     if (!captured) return;
-    
-    const savedSnip = SnipCloud.saveSnip(captured);
-    showToast(`☁️ Snip saved to SnipCloud! (ID: ${savedSnip.id})`, "success");
-  }, [captured]);
-
-  // Combined save handler with press detection
-  const handleSaveStart = useCallback(() => {
-    savePressTimer.current = setTimeout(() => {
-      // Press and hold - save to local storage
-      saveToLocalStorage();
-      savePressTimer.current = null;
-    }, 500);
-  }, [saveToLocalStorage]);
-
-  const handleSaveEnd = useCallback(() => {
-    if (savePressTimer.current) {
-      // Short press - save to SnipCloud
-      clearTimeout(savePressTimer.current);
-      savePressTimer.current = null;
-      saveToSnipCloud();
+    try {
+      const a = document.createElement("a");
+      a.href = captured;
+      const filename = `snipchat/snip-${Date.now()}.png`;
+      a.download = filename;
+      a.click();
+      toast("saved to snipchat folder 💾", { icon: "💾", type: "success" });
+    } catch {
+      toast("couldn't save locally", { icon: "❌", type: "error" });
     }
-  }, [saveToSnipCloud]);
+  };
 
   const sendSnip = () => {
     if (!captured) return;
@@ -494,20 +549,21 @@ export default function SnipChat() {
     setChatInput("");
     setCaptured(null);
     setShowChat(true);
-    showToast(`📨 Snip sent to ${messages.length + 1} friends!`, "success");
+    toast("snip sent! 🚀", { icon: "✉️", type: "success" });
   };
 
   const viewSnip = (msg) => {
     setViewingSnip(msg);
-    setMessages(prev => prev.map(m => 
+    setMessages(prev => prev.map(m =>
       m.id === msg.id ? { ...m, viewed: true, expires: Date.now() + 5000 } : m
     ));
-    showToast("👁️ Viewing snip... it will disappear in 5 seconds", "info");
+    toast("opening snip — closes in 5s", { icon: "👁️", type: "info", duration: 2000 });
   };
 
   const closeViewer = useCallback(() => {
     setViewingSnip(null);
-  }, []);
+    toast("snip closed", { icon: "🔒", type: "info", duration: 1500 });
+  }, [toast]);
 
   const showGate = camState !== CAM_STATE.GRANTED;
   const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
@@ -532,6 +588,10 @@ export default function SnipChat() {
           from { opacity: 0; }
           to   { opacity: 1; }
         }
+        @keyframes toastIn {
+          from { transform: translateY(-16px) scale(0.95); opacity: 0; }
+          to   { transform: translateY(0) scale(1); opacity: 1; }
+        }
       `}</style>
 
       <div style={{
@@ -542,6 +602,9 @@ export default function SnipChat() {
         position: "relative", overflow: "hidden",
       }}>
         {showGate && <PermissionGate state={camState} onRequest={() => startCamera()} />}
+
+        {/* Toast notifications */}
+        <ToastContainer toasts={toasts} />
 
         {/* Top bar */}
         <div style={{
@@ -590,13 +653,11 @@ export default function SnipChat() {
           <video ref={videoRef} playsInline muted style={{ display: "none" }} />
           <canvas ref={canvasRef} width={800} height={800}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-
           <div style={{
             position: "absolute", inset: 0, background: "#fff",
             opacity: flash ? 1 : 0, transition: "opacity 0.25s ease",
             pointerEvents: "none", borderRadius: 20,
           }} />
-
           {activeFilter !== "normal" && camState === CAM_STATE.GRANTED && (
             <div style={{
               position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)",
@@ -610,7 +671,6 @@ export default function SnipChat() {
               {currentFilter.label}
             </div>
           )}
-
           {timerCount !== null && (
             <div style={{
               position: "absolute", inset: 0,
@@ -629,7 +689,7 @@ export default function SnipChat() {
           )}
         </div>
 
-        {/* Bottom */}
+        {/* Bottom controls */}
         <div style={{ flexShrink: 0, paddingBottom: 20 }}>
           <div style={{
             display: "flex", gap: 10, overflowX: "auto",
@@ -640,7 +700,6 @@ export default function SnipChat() {
                 onClick={() => setActiveFilter(f.id)} videoRef={videoRef} />
             ))}
           </div>
-
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "center",
             gap: 32, padding: "10px 24px 4px",
@@ -652,7 +711,6 @@ export default function SnipChat() {
             }}>
               <Timer size={20} color={BRAND.muted} strokeWidth={1.8} />
             </button>
-
             <button
               onClick={handleCapture}
               onMouseDown={() => setPressing(true)}
@@ -671,7 +729,6 @@ export default function SnipChat() {
             >
               <div style={{ width: 52, height: 52, borderRadius: "50%", background: BRAND.yellow }} />
             </button>
-
             <button onClick={flipCamera} style={{
               width: 48, height: 48, borderRadius: "50%",
               background: `${BRAND.card}CC`, border: `1px solid ${BRAND.border}`,
@@ -682,7 +739,7 @@ export default function SnipChat() {
           </div>
         </div>
 
-        {/* Preview overlay */}
+        {/* Captured preview */}
         {captured && (
           <div style={{
             position: "absolute", inset: 0, zIndex: 50,
@@ -720,85 +777,63 @@ export default function SnipChat() {
                 style={{
                   width: "100%", background: BRAND.card, border: `1px solid ${BRAND.border}`,
                   borderRadius: 24, padding: "12px 16px", color: BRAND.text,
-                  fontSize: 14, outline: "none",
+                  fontSize: 14, outline: "none", fontFamily: "'DM Sans', sans-serif",
                 }}
               />
             </div>
 
-            <div style={{ display: "flex", gap: 12, padding: "12px 24px 28px" }}>
-              <button onClick={() => {
-                setCaptured(null);
-                setChatInput("");
-              }} style={{
+            <div style={{ display: "flex", gap: 10, padding: "8px 20px 24px" }}>
+              {/* Retake */}
+              <button onClick={() => { setCaptured(null); setChatInput(""); }} style={{
                 flex: 1, padding: "14px 0", borderRadius: 14,
                 background: BRAND.card, border: `1px solid ${BRAND.border}`,
-                color: BRAND.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                color: BRAND.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
                 fontFamily: "'DM Sans', sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               }}>
-                <X size={16} color={BRAND.text} strokeWidth={2} />
-                Retake
+                <X size={15} color={BRAND.text} strokeWidth={2} />
+                retake
               </button>
+
+              {/* Send snip */}
               <button onClick={sendSnip} style={{
-                flex: 1, padding: "14px 0", borderRadius: 14,
+                flex: 1.4, padding: "14px 0", borderRadius: 14,
                 background: BRAND.yellow, border: "none",
-                color: BRAND.dark, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                color: BRAND.dark, fontWeight: 800, fontSize: 14, cursor: "pointer",
                 fontFamily: "'DM Sans', sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
               }}>
-                <Send size={16} color={BRAND.dark} strokeWidth={2} />
-                Send Snip
+                <Send size={15} color={BRAND.dark} strokeWidth={2} />
+                send snip
               </button>
-              <button 
-                onMouseDown={handleSaveStart}
-                onMouseUp={handleSaveEnd}
-                onMouseLeave={handleSaveEnd}
-                onTouchStart={handleSaveStart}
-                onTouchEnd={handleSaveEnd}
-                style={{
-                  flex: 1, padding: "14px 0", borderRadius: 14,
-                  background: BRAND.card, border: `1px solid ${BRAND.border}`,
-                  color: BRAND.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
-                  fontFamily: "'DM Sans', sans-serif",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                }}>
-                <Download size={16} color={BRAND.text} strokeWidth={2} />
-                Save
-              </button>
+
+              {/* Save — tap = cloud, hold = local */}
+              <SaveButton onSaveCloud={saveToCloud} onSaveLocal={saveToLocal} />
             </div>
+
+            {/* Save hint */}
             <div style={{
-              textAlign: "center", 
-              fontSize: 10, 
-              color: BRAND.muted, 
-              marginTop: -8, 
-              marginBottom: 8,
-              fontFamily: "'DM Sans', sans-serif"
+              textAlign: "center", fontSize: 11, color: BRAND.muted,
+              paddingBottom: 10, paddingTop: 0,
+              fontFamily: "'DM Sans', sans-serif",
             }}>
-              💡 Tap Save → SnipCloud • Hold Save → Local folder
+              tap <strong style={{ color: BRAND.text }}>save</strong> → SnipCloud ☁️ &nbsp;·&nbsp; hold → local 💾
             </div>
           </div>
         )}
 
         {showChat && (
-          <ChatOverlay 
+          <ChatOverlay
             messages={messages}
             onClose={() => setShowChat(false)}
             onViewSnip={viewSnip}
           />
         )}
-        
+
         {viewingSnip && (
-          <SnipViewer 
+          <SnipViewer
             snip={viewingSnip}
             onClose={closeViewer}
-          />
-        )}
-
-        {toast && (
-          <Toast 
-            message={toast.message} 
-            type={toast.type} 
-            onClose={() => setToast(null)} 
           />
         )}
       </div>
