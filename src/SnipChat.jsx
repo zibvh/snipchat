@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { MessageCircle, User, Timer, RefreshCw, X, Download, Camera, Send, Eye } from "lucide-react";
 
 const BRAND = {
   yellow: "#FFE036",
@@ -146,6 +146,113 @@ function PermissionGate({ state, onRequest }) {
   );
 }
 
+// Chat Overlay as separate component
+const ChatOverlay = memo(({ messages, onClose, onViewSnap }) => {
+  const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
+  
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 60,
+      background: BRAND.dark, display: "flex", flexDirection: "column",
+      animation: "slideUp 0.25s ease",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
+      }}>
+        <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
+          💬 Snaps {unviewedCount > 0 && `(${unviewedCount})`}
+        </span>
+        <button onClick={onClose} style={{
+          background: BRAND.card, border: "none", borderRadius: 30,
+          padding: 8, cursor: "pointer",
+        }}>
+          <X size={18} color={BRAND.text} />
+        </button>
+      </div>
+      
+      <div style={{ flex: 1, overflowY: "auto", padding: 16, gap: 12, display: "flex", flexDirection: "column" }}>
+        {messages.length === 0 ? (
+          <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
+            No snaps yet. Take a photo and send it!
+          </p>
+        ) : messages.map((msg) => (
+          <div key={msg.id} onClick={() => !msg.viewed && msg.expires > Date.now() && onViewSnap(msg)} style={{
+            background: BRAND.card, borderRadius: 16, padding: 12,
+            border: `1px solid ${!msg.viewed && msg.expires > Date.now() ? BRAND.yellow : BRAND.border}`,
+            cursor: !msg.viewed && msg.expires > Date.now() ? "pointer" : "default",
+            opacity: msg.viewed || msg.expires < Date.now() ? 0.5 : 1,
+            transition: "all 0.2s",
+          }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
+              <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
+              <div>
+                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 Snap"}</div>
+                <div style={{ color: BRAND.muted, fontSize: 10 }}>{new Date(msg.time).toLocaleTimeString()}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: BRAND.muted }}>
+              {msg.viewed ? "👁️ Viewed" : msg.expires > Date.now() ? "✨ Tap to view" : "⏳ Expired"}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      <div style={{ padding: 16, borderTop: `1px solid ${BRAND.border}` }}>
+        <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center", marginBottom: 8 }}>
+          Take a photo → Add caption → Send Snap!
+        </p>
+      </div>
+    </div>
+  );
+});
+
+// Snap Viewer as separate component
+const SnapViewer = memo(({ snap, onClose }) => {
+  useEffect(() => {
+    // Auto-close after 5 seconds (like real Snapchat)
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  if (!snap) return null;
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 70,
+      background: "#000", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      animation: "fadeIn 0.2s ease",
+    }} onClick={onClose}>
+      <img src={snap.image} alt="Snap" style={{
+        width: "100%", height: "100%", objectFit: "contain",
+      }} />
+      {snap.text && (
+        <div style={{
+          position: "absolute", bottom: 100, left: 20, right: 20,
+          background: "rgba(0,0,0,0.8)", padding: 12, borderRadius: 20,
+          textAlign: "center", color: BRAND.text, fontSize: 16,
+        }}>
+          {snap.text}
+        </div>
+      )}
+      <button onClick={onClose} style={{
+        position: "absolute", top: 20, right: 20,
+        background: BRAND.card, border: "none", borderRadius: 30,
+        padding: 10, cursor: "pointer",
+      }}>
+        <X size={20} color={BRAND.text} />
+      </button>
+      <div style={{
+        position: "absolute", bottom: 40, left: 20, right: 20,
+        textAlign: "center", color: BRAND.muted, fontSize: 12,
+      }}>
+        Tap anywhere to close
+      </div>
+    </div>
+  );
+});
+
 export default function SnipChat() {
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
@@ -159,12 +266,10 @@ export default function SnipChat() {
   const [flash,        setFlash]        = useState(false);
   const [timerCount,   setTimerCount]   = useState(null);
   const [pressing,     setPressing]     = useState(false);
-  
-  // NEW: Chat state
-  const [showChat, setShowChat] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [chatInput, setChatInput] = useState("");
-  const [viewingSnap, setViewingSnap] = useState(null);
+  const [showChat,     setShowChat]     = useState(false);
+  const [messages,     setMessages]     = useState([]);
+  const [chatInput,    setChatInput]    = useState("");
+  const [viewingSnap,  setViewingSnap]  = useState(null);
 
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
 
@@ -194,12 +299,19 @@ export default function SnipChat() {
 
   useEffect(() => {
     startCamera();
-  }, []);
+  }, [startCamera]);
 
-  // Auto-expire messages
+  // Auto-expire messages - fixed to not cause excessive re-renders
   useEffect(() => {
     const interval = setInterval(() => {
-      setMessages(prev => prev.filter(msg => msg.expires > Date.now()));
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg.expires > Date.now());
+        // Only update if something changed
+        if (filtered.length !== prev.length) {
+          return filtered;
+        }
+        return prev;
+      });
     }, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -279,10 +391,10 @@ export default function SnipChat() {
       image: captured,
       text: chatInput,
       time: Date.now(),
-      expires: Date.now() + 30000, // 30 seconds to view
+      expires: Date.now() + 30000,
       viewed: false,
     };
-    setMessages([newMsg, ...messages]);
+    setMessages(prev => [newMsg, ...prev]);
     setChatInput("");
     setCaptured(null);
     setShowChat(true);
@@ -290,106 +402,17 @@ export default function SnipChat() {
 
   const viewSnap = (msg) => {
     setViewingSnap(msg);
-    // Mark as viewed and shorten expiration
     setMessages(prev => prev.map(m => 
       m.id === msg.id ? { ...m, viewed: true, expires: Date.now() + 5000 } : m
     ));
   };
 
+  const closeViewer = useCallback(() => {
+    setViewingSnap(null);
+  }, []);
+
   const showGate = camState !== CAM_STATE.GRANTED;
-
-  // Chat Overlay Component
-  const ChatOverlay = () => (
-    <div style={{
-      position: "absolute", inset: 0, zIndex: 60,
-      background: BRAND.dark, display: "flex", flexDirection: "column",
-      animation: "slideUp 0.25s ease",
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 18px", borderBottom: `1px solid ${BRAND.border}`,
-      }}>
-        <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.text }}>
-          💬 Snaps
-        </span>
-        <button onClick={() => setShowChat(false)} style={{
-          background: BRAND.card, border: "none", borderRadius: 30,
-          padding: 8, cursor: "pointer",
-        }}>
-          <X size={18} color={BRAND.text} />
-        </button>
-      </div>
-      
-      <div style={{ flex: 1, overflowY: "auto", padding: 16, gap: 12, display: "flex", flexDirection: "column" }}>
-        {messages.length === 0 ? (
-          <p style={{ color: BRAND.muted, textAlign: "center", marginTop: 40 }}>
-            No snaps yet. Take a photo and send it!
-          </p>
-        ) : messages.map((msg) => (
-          <div key={msg.id} onClick={() => !msg.viewed && viewSnap(msg)} style={{
-            background: BRAND.card, borderRadius: 16, padding: 12,
-            border: `1px solid ${msg.viewed ? BRAND.border : BRAND.yellow}`,
-            cursor: msg.viewed ? "default" : "pointer",
-            opacity: msg.viewed ? 0.6 : 1,
-            transition: "all 0.2s",
-          }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 8 }}>
-              <img src={msg.image} style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />
-              <div>
-                <div style={{ color: BRAND.text, fontWeight: 600, fontSize: 13 }}>{msg.text || "📸 Snap"}</div>
-                <div style={{ color: BRAND.muted, fontSize: 10 }}>{new Date(msg.time).toLocaleTimeString()}</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: BRAND.muted }}>
-              {msg.viewed ? "👁️ Viewed" : msg.expires > Date.now() ? "✨ Tap to view (30s)" : "⏳ Expired"}
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      <div style={{ padding: 16, borderTop: `1px solid ${BRAND.border}` }}>
-        <p style={{ fontSize: 12, color: BRAND.muted, textAlign: "center", marginBottom: 8 }}>
-          Take a photo, add a caption, and send!
-        </p>
-      </div>
-    </div>
-  );
-
-  // Snap Viewer
-  const SnapViewer = () => viewingSnap && (
-    <div style={{
-      position: "absolute", inset: 0, zIndex: 70,
-      background: "#000", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center",
-      animation: "fadeIn 0.2s ease",
-    }}>
-      <img src={viewingSnap.image} alt="Snap" style={{
-        width: "100%", height: "100%", objectFit: "contain",
-      }} />
-      {viewingSnap.text && (
-        <div style={{
-          position: "absolute", bottom: 100, left: 20, right: 20,
-          background: "rgba(0,0,0,0.7)", padding: 12, borderRadius: 20,
-          textAlign: "center", color: BRAND.text, fontSize: 16,
-        }}>
-          {viewingSnap.text}
-        </div>
-      )}
-      <button onClick={() => setViewingSnap(null)} style={{
-        position: "absolute", top: 20, right: 20,
-        background: BRAND.card, border: "none", borderRadius: 30,
-        padding: 10, cursor: "pointer",
-      }}>
-        <X size={20} color={BRAND.text} />
-      </button>
-      <div style={{
-        position: "absolute", bottom: 40, left: 20, right: 20,
-        textAlign: "center", color: BRAND.muted, fontSize: 12,
-      }}>
-        Tap anywhere to close
-      </div>
-    </div>
-  );
+  const unviewedCount = messages.filter(m => !m.viewed && m.expires > Date.now()).length;
 
   return (
     <>
@@ -441,13 +464,13 @@ export default function SnipChat() {
               position: "relative",
             }}>
               <MessageCircle size={17} color={BRAND.muted} strokeWidth={1.8} />
-              {messages.filter(m => !m.viewed && m.expires > Date.now()).length > 0 && (
+              {unviewedCount > 0 && (
                 <span style={{
                   position: "absolute", top: -4, right: -4,
                   background: BRAND.yellow, color: BRAND.dark,
                   borderRadius: 10, padding: "2px 6px", fontSize: 10, fontWeight: 800,
                 }}>
-                  {messages.filter(m => !m.viewed && m.expires > Date.now()).length}
+                  {unviewedCount}
                 </span>
               )}
             </button>
@@ -561,7 +584,7 @@ export default function SnipChat() {
           </div>
         </div>
 
-        {/* Preview overlay with Send option */}
+        {/* Preview overlay */}
         {captured && (
           <div style={{
             position: "absolute", inset: 0, zIndex: 50,
@@ -590,7 +613,6 @@ export default function SnipChat() {
             <img src={captured} alt="Captured"
               style={{ flex: 1, objectFit: "cover", borderRadius: 20, margin: 12 }} />
 
-            {/* Caption input */}
             <div style={{ padding: "0 20px", marginBottom: 12 }}>
               <input
                 type="text"
@@ -643,8 +665,20 @@ export default function SnipChat() {
           </div>
         )}
 
-        {showChat && <ChatOverlay />}
-        {viewingSnap && <SnapViewer />}
+        {showChat && (
+          <ChatOverlay 
+            messages={messages}
+            onClose={() => setShowChat(false)}
+            onViewSnap={viewSnap}
+          />
+        )}
+        
+        {viewingSnap && (
+          <SnapViewer 
+            snap={viewingSnap}
+            onClose={closeViewer}
+          />
+        )}
       </div>
     </>
   );
