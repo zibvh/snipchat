@@ -3,9 +3,16 @@ name: Build Android APK
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0, v2.1.3, etc.
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        type: string
 
 jobs:
   build-android:
@@ -57,17 +64,19 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: snipchat-debug.apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
-  # ── Release APK (signed) — runs only on version tags ──────────────────────
+  # ── Release APK (signed) — runs on version tags or manual trigger ──────────────────────
   build-android-release:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: |
+      startsWith(github.ref, 'refs/tags/v') || 
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_version != '')
 
     steps:
       - name: Checkout repo
@@ -111,6 +120,31 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
 
+      - name: Get version from tag or input
+        id: get_version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION=${GITHUB_REF_NAME#v}
+          else
+            VERSION="${{ github.event.inputs.release_version }}"
+            VERSION=${VERSION#v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update versionCode and versionName in build.gradle
+        working-directory: android
+        run: |
+          # Extract current versionCode and increment it
+          CURRENT_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle)
+          NEW_CODE=$((CURRENT_CODE + 1))
+          
+          # Update versionCode and versionName
+          sed -i "s/versionCode [0-9]*/versionCode $NEW_CODE/" app/build.gradle
+          sed -i "s/versionName \".*\"/versionName \"${{ steps.get_version.outputs.version }}\"/" app/build.gradle
+          
+          echo "Updated versionCode to $NEW_CODE and versionName to ${{ steps.get_version.outputs.version }}"
+
       - name: Build release APK
         working-directory: android
         env:
@@ -124,9 +158,33 @@ jobs:
             -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
             -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
-      - name: Upload signed APK
+      - name: Rename release APK with version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          mv android/app/build/outputs/apk/release/app-release.apk "snipchat-v${VERSION}.apk"
+
+      - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: snipchat-release.apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: snipchat-release-${{ steps.get_version.outputs.version }}.apk
+          path: snipchat-v${{ steps.get_version.outputs.version }}.apk
           retention-days: 30
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ## SnipChat v${{ steps.get_version.outputs.version }}
+            
+            ### 📱 APK Download
+            - Download the APK attached below to install on your Android device
+            
+            ### ✨ Changes
+            - Auto-generated release
+          files: snipchat-v${{ steps.get_version.outputs.version }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
