@@ -36,12 +36,16 @@ jobs:
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
 
-      # ✅ FIX: Add Android platform before syncing
       - name: Install Capacitor Android platform
         run: npm install @capacitor/android
 
-      - name: Add Android platform
-        run: npx cap add android
+      - name: Setup Android platform (if not exists)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Android platform already exists, skipping add"
+          fi
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -87,12 +91,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ✅ FIX: Add Android platform before syncing
       - name: Install Capacitor Android platform
         run: npm install @capacitor/android
 
-      - name: Add Android platform
-        run: npx cap add android
+      - name: Setup Android platform (if not exists)
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          else
+            echo "Android platform already exists, skipping add"
+          fi
 
       - name: Sync Capacitor
         run: npx cap sync android
