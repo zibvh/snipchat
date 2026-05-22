@@ -3,58 +3,37 @@ name: Build Android APK
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*'  # Trigger on version tags like v1.0.0, v2.1.3, etc.
   pull_request:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      release_version:
-        description: 'Version tag (e.g., v1.0.0)'
-        required: false
-        type: string
 
 jobs:
-  build-android:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 20
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build Vite app
-        run: npm run build
-
-      - name: Set up Java (required for Gradle)
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: 17
 
-      - name: Install Capacitor CLI
-        run: npm install -g @capacitor/cli
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Install Capacitor Android platform
-        run: npm install @capacitor/android
+      - name: Build web app
+        run: npm run build
 
-      - name: Setup Android platform (if not exists)
-        run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          else
-            echo "Android platform already exists, skipping add"
-          fi
-
-      - name: Sync Capacitor
+      - name: Sync Capacitor to Android
         run: npx cap sync android
 
       - name: Make Gradle wrapper executable
@@ -62,129 +41,11 @@ jobs:
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --no-daemon
 
-      - name: Upload debug APK artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: snipchat-debug.apk
+          name: snipchat-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
-
-  # ── Release APK (signed) — runs on version tags or manual trigger ──────────────────────
-  build-android-release:
-    runs-on: ubuntu-latest
-    if: |
-      startsWith(github.ref, 'refs/tags/v') || 
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.release_version != '')
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build Vite app
-        run: npm run build
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Install Capacitor Android platform
-        run: npm install @capacitor/android
-
-      - name: Setup Android platform (if not exists)
-        run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          else
-            echo "Android platform already exists, skipping add"
-          fi
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Make Gradle wrapper executable
-        run: chmod +x android/gradlew
-
-      - name: Decode keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
-
-      - name: Get version from tag or input
-        id: get_version
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            VERSION=${GITHUB_REF_NAME#v}
-          else
-            VERSION="${{ github.event.inputs.release_version }}"
-            VERSION=${VERSION#v}
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Update versionCode and versionName in build.gradle
-        working-directory: android
-        run: |
-          # Extract current versionCode and increment it
-          CURRENT_CODE=$(grep -oP 'versionCode \K\d+' app/build.gradle)
-          NEW_CODE=$((CURRENT_CODE + 1))
-          
-          # Update versionCode and versionName
-          sed -i "s/versionCode [0-9]*/versionCode $NEW_CODE/" app/build.gradle
-          sed -i "s/versionName \".*\"/versionName \"${{ steps.get_version.outputs.version }}\"/" app/build.gradle
-          
-          echo "Updated versionCode to $NEW_CODE and versionName to ${{ steps.get_version.outputs.version }}"
-
-      - name: Build release APK
-        working-directory: android
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=release.keystore \
-            -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-            -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-            -Pandroid.injected.signing.key.password=$KEY_PASSWORD
-
-      - name: Rename release APK with version
-        run: |
-          VERSION="${{ steps.get_version.outputs.version }}"
-          mv android/app/build/outputs/apk/release/app-release.apk "snipchat-v${VERSION}.apk"
-
-      - name: Upload signed APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: snipchat-release-${{ steps.get_version.outputs.version }}.apk
-          path: snipchat-v${{ steps.get_version.outputs.version }}.apk
-          retention-days: 30
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.get_version.outputs.tag }}
-          name: Release ${{ steps.get_version.outputs.version }}
-          body: |
-            ## SnipChat v${{ steps.get_version.outputs.version }}
-            
-            ### 📱 APK Download
-            - Download the APK attached below to install on your Android device
-            
-            ### ✨ Changes
-            - Auto-generated release
-          files: snipchat-v${{ steps.get_version.outputs.version }}.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
+import { Camera } from "@capacitor/camera";
 import { MessageCircle, User, RefreshCw, X, Zap, Sparkles, Download, Scissors, Type, Pen, Music, Share2, Check, Mic, Smile, Trash2, ChevronUp, ChevronDown, RotateCcw, Eye } from "lucide-react";
 
 const BRAND = {
@@ -1273,6 +1274,12 @@ export default function SnipChat() {
     setCamState(CAM_STATE.ASKING);
     streamRef.current?.getTracks().forEach(t => t.stop());
     try {
+      // Request native camera + microphone permissions via Capacitor (required on Android)
+      const perms = await Camera.requestPermissions({ permissions: ["camera"] });
+      if (perms.camera !== "granted") {
+        setCamState(CAM_STATE.DENIED);
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 1280 } },
         audio: true,
