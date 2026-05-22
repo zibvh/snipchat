@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SnipChat</string>
+    <string name="title_activity_main">SnipChat</string>
+    <string name="package_name">com.snipchat.app</string>
+    <string name="custom_url_scheme">com.snipchat.app</string>
+</resources>

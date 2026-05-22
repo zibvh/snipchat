@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { MessageCircle, User, RefreshCw, X, Zap, Sparkles, Download, Scissors, Type, Pen, Music, Share2, Check, Mic } from "lucide-react";
+import { MessageCircle, User, RefreshCw, X, Zap, Sparkles, Download, Scissors, Type, Pen, Music, Share2, Check, Mic, Smile, Trash2, ChevronUp, ChevronDown, RotateCcw, Eye } from "lucide-react";
 
 const BRAND = {
   yellow: "#FFFC00",
@@ -27,14 +27,24 @@ const MAX_VIDEO_SEC = 180;
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function ToastContainer({ toasts }) {
   return (
-    <div style={{ position:"absolute", bottom:100, left:16, right:16, zIndex:200,
+    <div style={{ position:"absolute", top:70, left:0, right:0, zIndex:200,
       display:"flex", flexDirection:"column", gap:8, pointerEvents:"none", alignItems:"center" }}>
       {toasts.map(t => (
-        <div key={t.id} style={{ background:"rgba(0,0,0,0.85)", backdropFilter:"blur(20px)",
-          borderRadius:30, padding:"8px 18px", display:"flex", alignItems:"center", gap:8,
-          border:"0.5px solid rgba(255,255,255,0.1)", animation:"toastPop 0.3s cubic-bezier(0.34,1.2,0.64,1)" }}>
-          <span style={{ fontSize:16 }}>{t.icon}</span>
-          <span style={{ color:"#FFF", fontSize:13, fontWeight:500, fontFamily:"'SF Pro Text',-apple-system,sans-serif" }}>{t.message}</span>
+        <div key={t.id} style={{
+          background:"rgba(20,20,20,0.92)",
+          backdropFilter:"blur(24px)",
+          WebkitBackdropFilter:"blur(24px)",
+          borderRadius:14,
+          padding:"10px 20px",
+          display:"flex", alignItems:"center", gap:10,
+          border:"1px solid rgba(255,255,255,0.08)",
+          boxShadow:"0 4px 24px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.06) inset",
+          animation:"toastSlide 0.3s cubic-bezier(0.34,1.2,0.64,1)",
+          minWidth:140, maxWidth:280,
+        }}>
+          <span style={{ fontSize:18, lineHeight:1 }}>{t.icon}</span>
+          <span style={{ color:"#FFF", fontSize:13, fontWeight:600,
+            fontFamily:"'DM Sans',-apple-system,sans-serif", letterSpacing:"0.1px" }}>{t.message}</span>
         </div>
       ))}
     </div>
@@ -66,8 +76,21 @@ function SnipLogo({ size = 32 }) {
   );
 }
 
-// ─── Filter Carousel — uneven bubbly circles ──────────────────────────────────
-const BUBBLE_SIZES = [64, 72, 58, 76, 60, 68, 54];
+// ─── Filter Carousel — weird-edged polygon shapes ─────────────────────────────
+// Each filter gets a unique clip-path polygon; all same size except active
+const CLIP_SHAPES = [
+  "polygon(50% 0%, 95% 15%, 100% 60%, 80% 100%, 20% 100%, 0% 60%, 5% 15%)",   // heptagon-ish
+  "polygon(50% 0%, 100% 30%, 90% 90%, 50% 100%, 10% 90%, 0% 30%)",             // hex squish
+  "polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)", // octagon
+  "polygon(50% 0%, 85% 10%, 100% 50%, 85% 90%, 50% 100%, 15% 90%, 0% 50%, 15% 10%)", // smooth oct
+  "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",             // diamond hex
+  "polygon(20% 0%, 80% 0%, 100% 20%, 100% 80%, 80% 100%, 20% 100%, 0% 80%, 0% 20%)", // chamfer rect
+  "polygon(50% 0%, 90% 20%, 100% 65%, 70% 100%, 30% 100%, 0% 65%, 10% 20%)",   // leaning blob
+];
+
+const FILTER_SIZE = 62; // uniform base size
+const FILTER_SIZE_ACTIVE = 74; // active is bigger
+
 function FilterCarousel({ filters, activeId, onSelect, videoRef }) {
   const previewRefs = useRef({});
 
@@ -95,34 +118,53 @@ function FilterCarousel({ filters, activeId, onSelect, videoRef }) {
 
   return (
     <div style={{ position:"absolute", bottom:96, left:0, right:0, overflowX:"auto", overflowY:"hidden",
-      display:"flex", gap:10, padding:"0 16px 8px", scrollbarWidth:"none", WebkitOverflowScrolling:"touch",
-      zIndex:20, alignItems:"flex-end" }}>
+      display:"flex", gap:8, padding:"0 16px 8px", scrollbarWidth:"none", WebkitOverflowScrolling:"touch",
+      zIndex:20, alignItems:"center" }}>
       {filters.map((filter, i) => {
-        const sz = BUBBLE_SIZES[i % BUBBLE_SIZES.length];
         const active = activeId === filter.id;
+        const sz = active ? FILTER_SIZE_ACTIVE : FILTER_SIZE;
+        const clipShape = CLIP_SHAPES[i % CLIP_SHAPES.length];
         return (
           <button key={filter.id} onClick={() => onSelect(filter.id)}
-            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
               background:"none", border:"none", cursor:"pointer", flexShrink:0,
-              transition:"transform 0.2s", transform: active ? "scale(1.12) translateY(-4px)" : "scale(1)" }}>
-            <div style={{ width:sz, height:sz, borderRadius:"50%", overflow:"hidden",
-              border: active ? `3px solid ${BRAND.yellow}` : "2.5px solid rgba(255,255,255,0.25)",
-              boxShadow: active ? `0 0 18px ${BRAND.yellow}88` : "0 2px 8px rgba(0,0,0,0.5)",
-              background:"#1A1A1A", flexShrink:0 }}>
-              <canvas
-                ref={el => {
-                  if (el && previewRefs.current[filter.id]) {
-                    const ctx = el.getContext("2d");
-                    ctx.drawImage(previewRefs.current[filter.id], 0, 0, sz, sz);
-                  }
-                }}
-                width={sz} height={sz}
-                style={{ width:"100%", height:"100%", display:"block" }}
-              />
+              transition:"all 0.22s cubic-bezier(0.34,1.3,0.64,1)" }}>
+            {/* Outer glow ring — clipped to same shape */}
+            <div style={{
+              width: sz + (active ? 6 : 0),
+              height: sz + (active ? 6 : 0),
+              clipPath: clipShape,
+              background: active ? BRAND.yellow : "rgba(255,255,255,0.18)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              transition:"all 0.22s cubic-bezier(0.34,1.3,0.64,1)",
+              flexShrink:0,
+            }}>
+              {/* Inner media tile */}
+              <div style={{
+                width: sz - (active ? 4 : 3),
+                height: sz - (active ? 4 : 3),
+                clipPath: clipShape,
+                overflow:"hidden",
+                background:"#1A1A1A",
+                boxShadow: active ? `0 0 20px ${BRAND.yellow}66` : "none",
+              }}>
+                <canvas
+                  ref={el => {
+                    if (el && previewRefs.current[filter.id]) {
+                      const ctx = el.getContext("2d");
+                      ctx.drawImage(previewRefs.current[filter.id], 0, 0, sz, sz);
+                    }
+                  }}
+                  width={sz} height={sz}
+                  style={{ width:"100%", height:"100%", display:"block" }}
+                />
+              </div>
             </div>
-            <span style={{ fontSize:10, fontWeight: active ? 700 : 400,
-              color: active ? BRAND.yellow : "rgba(255,255,255,0.8)",
-              fontFamily:"'SF Pro Text',-apple-system,sans-serif", whiteSpace:"nowrap" }}>
+            <span style={{ fontSize:10, fontWeight: active ? 700 : 500,
+              color: active ? BRAND.yellow : "rgba(255,255,255,0.65)",
+              fontFamily:"'SF Pro Text',-apple-system,sans-serif", whiteSpace:"nowrap",
+              letterSpacing: active ? "0.3px" : 0,
+              transition:"all 0.2s" }}>
               {filter.label}
             </span>
           </button>
@@ -278,40 +320,262 @@ const SavedGallery = memo(({ snaps, onClose }) => (
 ));
 
 // ─── Edit Screen ──────────────────────────────────────────────────────────────
-function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
-  const canvasRef = useRef(null);
-  const [tool, setTool] = useState(null); // "crop"|"text"|"paint"|"music"
-  const [texts, setTexts] = useState([]);
-  const [textInput, setTextInput] = useState("");
-  const [textColor, setTextColor] = useState("#FFFC00");
-  const [painting, setPainting] = useState(false);
-  const [paintColor, setPaintColor] = useState("#FF3B30");
-  const [paintSize, setPaintSize] = useState(6);
-  const [musicFile, setMusicFile] = useState(null);
-  const [musicName, setMusicName] = useState(null);
-  const [cropBox, setCropBox] = useState({ x:0.1, y:0.1, w:0.8, h:0.8 });
-  const [draggingCrop, setDraggingCrop] = useState(null);
-  const lastPoint = useRef(null);
-  const audioRef = useRef(null);
-  const musicInputRef = useRef(null);
+// ─── Sticker data ─────────────────────────────────────────────────────────────
+const STICKERS = ["🔥","✨","💥","⚡","🎉","💯","🤩","😍","💀","👻","🌈","🍕","🎵","❤️","💔","🌙","⭐","🦋","🎯","🏆"];
+const TEXT_STYLES = [
+  { id:"normal",  label:"Plain",   render:(t,c) => ({ color:c, textShadow:"0 2px 8px rgba(0,0,0,0.8)", WebkitTextStroke:"0.5px rgba(0,0,0,0.4)" }) },
+  { id:"outline", label:"Outline", render:(t,c) => ({ color:"#000", WebkitTextStroke:`2px ${c}`, textShadow:"none" }) },
+  { id:"glow",    label:"Glow",    render:(t,c) => ({ color:"#fff", textShadow:`0 0 12px ${c}, 0 0 24px ${c}, 0 2px 4px rgba(0,0,0,0.9)` }) },
+  { id:"shadow",  label:"Shadow",  render:(t,c) => ({ color:c, textShadow:"3px 3px 0px rgba(0,0,0,0.9)", WebkitTextStroke:"0.5px rgba(0,0,0,0.3)" }) },
+  { id:"fill",    label:"Fill",    render:(t,c) => ({ color:"#fff", background:c, padding:"2px 10px", borderRadius:6, textShadow:"none" }) },
+];
 
-  // Draw image onto canvas
+// ─── Audio + Video muxer ───────────────────────────────────────────────────────
+// Mixes an audio track into a video blob using WebAudio → AudioContext → mux.
+// For photos, encodes canvas + audio into a short webm via MediaRecorder.
+async function muxAudioIntoVideo(videoBlob, audioUrl, durationSec) {
+  try {
+    // Decode the audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioResp = await fetch(audioUrl);
+    const audioArrayBuf = await audioResp.arrayBuffer();
+    const audioBuffer = await audioCtx.decodeAudioData(audioArrayBuf);
+
+    // Create an OfflineAudioContext for rendering
+    const sampleRate = audioBuffer.sampleRate;
+    const durationToUse = durationSec || 5;
+    const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * durationToUse), sampleRate);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.loop = true;
+    source.connect(offlineCtx.destination);
+    source.start(0);
+    const renderedBuffer = await offlineCtx.startRendering();
+    await audioCtx.close();
+
+    // Convert rendered audio to WAV blob
+    const wavBlob = audioBufferToWav(renderedBuffer);
+    const wavUrl = URL.createObjectURL(wavBlob);
+
+    // Now combine: use canvas + audio stream via MediaRecorder
+    const videoEl = document.createElement("video");
+    videoEl.src = URL.createObjectURL(videoBlob);
+    videoEl.muted = true;
+    await new Promise(r => { videoEl.onloadedmetadata = r; videoEl.load(); });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = videoEl.videoWidth || 800;
+    canvas.height = videoEl.videoHeight || 800;
+    const ctx = canvas.getContext("2d");
+
+    // Audio destination stream
+    const audioCtx2 = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioCtx2.createMediaStreamDestination();
+    const audioEl = new Audio(wavUrl);
+    audioEl.loop = true;
+    const srcNode = audioCtx2.createMediaElementSource(audioEl);
+    srcNode.connect(dest);
+    srcNode.connect(audioCtx2.destination);
+
+    const canvasStream = canvas.captureStream(30);
+    const combinedStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks(),
+    ]);
+
+    const chunks = [];
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+      ? "video/webm;codecs=vp8,opus" : "video/webm";
+    const recorder = new MediaRecorder(combinedStream, { mimeType });
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+    return new Promise((resolve) => {
+      recorder.onstop = () => {
+        audioCtx2.close();
+        const finalBlob = new Blob(chunks, { type: mimeType });
+        resolve(URL.createObjectURL(finalBlob));
+      };
+
+      videoEl.onplay = () => { /* draw loop starts */ };
+      const draw = () => {
+        if (videoEl.ended || videoEl.paused) return;
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(draw);
+      };
+
+      recorder.start(100);
+      audioEl.play();
+      videoEl.play().then(() => {
+        draw();
+        const dur = (videoEl.duration || durationToUse) * 1000;
+        setTimeout(() => { recorder.stop(); videoEl.pause(); audioEl.pause(); }, dur);
+      });
+    });
+  } catch (err) {
+    console.warn("Audio mux failed, returning original:", err);
+    return URL.createObjectURL(videoBlob);
+  }
+}
+
+// Photo + audio → short video clip
+async function photoWithAudioToVideo(imageDataUrl, audioUrl, durationSec = 5) {
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = imageDataUrl; });
+
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = audioCtx.createMediaStreamDestination();
+    const audioEl = new Audio(audioUrl);
+    audioEl.loop = true;
+    const srcNode = audioCtx.createMediaElementSource(audioEl);
+    srcNode.connect(dest);
+    srcNode.connect(audioCtx.destination);
+
+    const canvasStream = canvas.captureStream(30);
+    const combined = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...dest.stream.getAudioTracks(),
+    ]);
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+      ? "video/webm;codecs=vp8,opus" : "video/webm";
+    const recorder = new MediaRecorder(combined, { mimeType });
+    const chunks = [];
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+    return new Promise(resolve => {
+      recorder.onstop = () => {
+        audioCtx.close();
+        resolve({ url: URL.createObjectURL(new Blob(chunks, { type: mimeType })), type: "video" });
+      };
+      recorder.start(100);
+      audioEl.play();
+      setTimeout(() => { recorder.stop(); audioEl.pause(); }, durationSec * 1000);
+    });
+  } catch (err) {
+    console.warn("Photo+audio encode failed:", err);
+    return { url: imageDataUrl, type: "photo" };
+  }
+}
+
+// Simple WAV encoder from AudioBuffer
+function audioBufferToWav(buffer) {
+  const numCh = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const length = buffer.length;
+  const arrayBuffer = new ArrayBuffer(44 + length * numCh * 2);
+  const view = new DataView(arrayBuffer);
+  const writeStr = (off, str) => { for (let i=0;i<str.length;i++) view.setUint8(off+i, str.charCodeAt(i)); };
+  writeStr(0, "RIFF");
+  view.setUint32(4, 36 + length * numCh * 2, true);
+  writeStr(8, "WAVE"); writeStr(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true);
+  view.setUint16(22, numCh, true); view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numCh * 2, true); view.setUint16(32, numCh * 2, true);
+  view.setUint16(34, 16, true); writeStr(36, "data");
+  view.setUint32(40, length * numCh * 2, true);
+  let off = 44;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < numCh; ch++) {
+      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i]));
+      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      off += 2;
+    }
+  }
+  return new Blob([arrayBuffer], { type: "audio/wav" });
+}
+
+// ─── EditScreen ───────────────────────────────────────────────────────────────
+function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
+  const canvasRef   = useRef(null);
+  const audioRef    = useRef(null);
+  const musicInputRef = useRef(null);
+  const wrapRef     = useRef(null);
+  const lastPoint   = useRef(null);
+  const historyRef  = useRef([]);   // undo stack of canvas imageData snapshots
+
+  const [tool,       setTool]       = useState(null);
+  const [painting,   setPainting]   = useState(false);
+  const [paintColor, setPaintColor] = useState("#FF3B30");
+  const [paintSize,  setPaintSize]  = useState(8);
+  const [paintMode,  setPaintMode]  = useState("pen");  // "pen"|"neon"|"eraser"
+  const [texts,      setTexts]      = useState([]);
+  const [stickers,   setStickers]   = useState([]);
+  const [textInput,  setTextInput]  = useState("");
+  const [textColor,  setTextColor]  = useState("#FFFC00");
+  const [textStyle,  setTextStyle]  = useState("normal");
+  const [textSize,   setTextSize]   = useState(26);
+  const [musicFile,  setMusicFile]  = useState(null);
+  const [musicName,  setMusicName]  = useState(null);
+  const [musicVol,   setMusicVol]   = useState(0.8);
+  const [musicStart, setMusicStart] = useState(0);
+  const [audioPeaks, setAudioPeaks] = useState([]);
+  const [processing, setProcessing] = useState(false);
+  const [selectedText, setSelectedText] = useState(null);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast,   setContrast]   = useState(100);
+  const [saturation, setSaturation] = useState(100);
+
+  // Load image onto canvas
   useEffect(() => {
     if (mediaType !== "photo") return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const img = new Image();
     img.onload = () => {
-      canvas.width = img.width;
+      canvas.width  = img.width;
       canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      historyRef.current = [];
     };
     img.src = media;
   }, [media, mediaType]);
 
+  // Visualise audio waveform peaks
+  const analyseAudio = async (url) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = await (await fetch(url)).arrayBuffer();
+      const decoded = await ctx.decodeAudioData(buf);
+      await ctx.close();
+      const data = decoded.getChannelData(0);
+      const buckets = 40;
+      const step = Math.floor(data.length / buckets);
+      const peaks = [];
+      for (let i = 0; i < buckets; i++) {
+        let max = 0;
+        for (let j = 0; j < step; j++) max = Math.max(max, Math.abs(data[i * step + j]));
+        peaks.push(max);
+      }
+      setAudioPeaks(peaks);
+    } catch { setAudioPeaks([]); }
+  };
+
+  const pushHistory = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const snap = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+    historyRef.current = [...historyRef.current.slice(-19), snap];
+  };
+
+  const undo = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || historyRef.current.length === 0) return;
+    const prev = historyRef.current[historyRef.current.length - 1];
+    historyRef.current = historyRef.current.slice(0, -1);
+    canvas.getContext("2d").putImageData(prev, 0, 0);
+  };
+
+  // ── Paint handlers ──
   const handlePaintStart = (e) => {
     if (tool !== "paint") return;
+    pushHistory();
     setPainting(true);
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = canvasRef.current.width / rect.width;
@@ -334,80 +598,207 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
     const touch = e.touches ? e.touches[0] : e;
     const x = (touch.clientX - rect.left) * scaleX;
     const y = (touch.clientY - rect.top) * scaleY;
-    ctx.strokeStyle = paintColor;
-    ctx.lineWidth = paintSize * scaleX;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
+
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    if (paintMode === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.lineWidth = paintSize * 3 * scaleX;
+      ctx.strokeStyle = "rgba(0,0,0,1)";
+    } else if (paintMode === "neon") {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.shadowColor = paintColor;
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = paintSize * scaleX;
+      ctx.strokeStyle = paintColor;
+    } else {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = paintSize * scaleX;
+      ctx.strokeStyle = paintColor;
+    }
     ctx.beginPath();
     ctx.moveTo(lastPoint.current.x, lastPoint.current.y);
     ctx.lineTo(x, y);
     ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = "source-over";
     lastPoint.current = { x, y };
   };
 
+  // ── Text ──
   const addText = () => {
     if (!textInput.trim()) return;
-    setTexts(prev => [...prev, { id: Date.now(), text: textInput, color: textColor, x: 50, y: 45 }]);
-    setTextInput("");
-    setTool(null);
+    setTexts(prev => [...prev, {
+      id: Date.now(), text: textInput, color: textColor,
+      style: textStyle, size: textSize, x: 50, y: 42, rotation: 0,
+    }]);
+    setTextInput(""); setTool(null);
   };
 
+  const deleteText = (id) => setTexts(prev => prev.filter(t => t.id !== id));
+
+  const makeDraggable = (id, e, isTouch) => {
+    e.preventDefault();
+    setSelectedText(id);
+    const startX = isTouch ? e.touches[0].clientX : e.clientX;
+    const startY = isTouch ? e.touches[0].clientY : e.clientY;
+    const item = texts.find(t => t.id === id) || stickers.find(s => s.id === id);
+    if (!item) return;
+    const origX = item.x, origY = item.y;
+    const wrap = wrapRef.current;
+    const rect = wrap ? wrap.getBoundingClientRect() : document.body.getBoundingClientRect();
+
+    const onMove = (ev) => {
+      const cx = isTouch ? ev.touches[0].clientX : ev.clientX;
+      const cy = isTouch ? ev.touches[0].clientY : ev.clientY;
+      const nx = Math.max(4, Math.min(96, origX + (cx - startX) / rect.width * 100));
+      const ny = Math.max(4, Math.min(96, origY + (cy - startY) / rect.height * 100));
+      setTexts(prev => prev.map(t => t.id === id ? {...t, x:nx, y:ny} : t));
+      setStickers(prev => prev.map(s => s.id === id ? {...s, x:nx, y:ny} : s));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onUp);
+    };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive:false });
+    window.addEventListener("touchend", onUp);
+  };
+
+  // ── Music ──
   const handleMusicPick = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
     setMusicFile(url);
     setMusicName(file.name.replace(/\.[^.]+$/, ""));
-    if (audioRef.current) { audioRef.current.src = url; audioRef.current.play(); }
-    toast(`🎵 ${file.name.replace(/\.[^.]+$/, "")}`, { icon: "🎵" });
+    analyseAudio(url);
+    if (audioRef.current) {
+      audioRef.current.src = url;
+      audioRef.current.currentTime = musicStart;
+      audioRef.current.volume = musicVol;
+      audioRef.current.play();
+    }
+    toast(`🎵 ${file.name.replace(/\.[^.]+$/, "")}`, { icon:"🎵" });
     setTool(null);
   };
 
-  const handleDone = () => {
-    if (mediaType !== "photo") { onDone(media, texts, musicFile); return; }
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // Bake text overlays into canvas
-    const ctx = canvas.getContext("2d");
-    texts.forEach(t => {
-      const fontSize = Math.round(canvas.width * 0.06);
-      ctx.font = `bold ${fontSize}px 'SF Pro Text', sans-serif`;
-      ctx.fillStyle = t.color;
-      ctx.textAlign = "center";
-      ctx.strokeStyle = "rgba(0,0,0,0.8)";
-      ctx.lineWidth = fontSize * 0.08;
-      const x = (t.x / 100) * canvas.width;
-      const y = (t.y / 100) * canvas.height;
-      ctx.strokeText(t.text, x, y);
-      ctx.fillText(t.text, x, y);
-    });
-    // Crop if active
-    if (tool === "crop") {
-      const cx = Math.round(cropBox.x * canvas.width);
-      const cy = Math.round(cropBox.y * canvas.height);
-      const cw = Math.round(cropBox.w * canvas.width);
-      const ch = Math.round(cropBox.h * canvas.height);
-      const tmp = document.createElement("canvas");
-      tmp.width = cw; tmp.height = ch;
-      tmp.getContext("2d").drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
-      onDone(tmp.toDataURL("image/png"), [], musicFile);
-      return;
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = musicVol;
+  }, [musicVol]);
+
+  useEffect(() => {
+    if (audioRef.current && musicFile) audioRef.current.currentTime = musicStart;
+  }, [musicStart, musicFile]);
+
+  // ── Done / export ──
+  const handleDone = async () => {
+    setProcessing(true);
+    toast("Processing...", { icon:"⚙️" });
+
+    // Bake text + stickers onto canvas (photo only)
+    const bakeOverlays = (canvas) => {
+      const ctx = canvas.getContext("2d");
+      texts.forEach(t => {
+        const styleObj = TEXT_STYLES.find(s => s.id === t.style) || TEXT_STYLES[0];
+        const style = styleObj.render(t.text, t.color);
+        const fontSize = t.size * (canvas.width / 400);
+        ctx.save();
+        ctx.font = `bold ${fontSize}px 'DM Sans', sans-serif`;
+        ctx.textAlign = "center";
+        const x = (t.x / 100) * canvas.width;
+        const y = (t.y / 100) * canvas.height;
+        ctx.translate(x, y);
+        if (t.rotation) ctx.rotate(t.rotation * Math.PI / 180);
+        if (style.textShadow && style.textShadow.includes("px")) {
+          const parts = style.textShadow.match(/(-?\d+)px (-?\d+)px (\d+)px ([^\s,]+)/);
+          if (parts) { ctx.shadowOffsetX=+parts[1]; ctx.shadowOffsetY=+parts[2]; ctx.shadowBlur=+parts[3]; ctx.shadowColor=parts[4]; }
+        }
+        if (style.WebkitTextStroke) {
+          const sw = parseFloat(style.WebkitTextStroke);
+          ctx.strokeStyle = style.WebkitTextStroke.replace(/^[\d.]+px /, "");
+          ctx.lineWidth = sw * 2; ctx.strokeText(t.text, 0, 0);
+        }
+        ctx.fillStyle = style.color || t.color;
+        ctx.fillText(t.text, 0, 0);
+        ctx.restore();
+      });
+      stickers.forEach(s => {
+        const sz = s.size * (canvas.width / 400);
+        const x = (s.x / 100) * canvas.width;
+        const y = (s.y / 100) * canvas.height;
+        ctx.save();
+        ctx.font = `${sz}px serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(s.emoji, x, y);
+        ctx.restore();
+      });
+    };
+
+    try {
+      if (mediaType === "photo") {
+        // Apply adjust filters
+        const canvas = canvasRef.current;
+        const tmp = document.createElement("canvas");
+        tmp.width = canvas.width; tmp.height = canvas.height;
+        const ctx = tmp.getContext("2d");
+        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+        ctx.drawImage(canvas, 0, 0);
+        ctx.filter = "none";
+        bakeOverlays(tmp);
+        const finalDataUrl = tmp.toDataURL("image/png");
+
+        if (musicFile) {
+          const result = await photoWithAudioToVideo(finalDataUrl, musicFile, 5);
+          setProcessing(false);
+          onDone(result.url, result.type, musicFile, musicStart, musicVol);
+        } else {
+          setProcessing(false);
+          onDone(finalDataUrl, "photo", null, 0, 1);
+        }
+      } else {
+        // Video path
+        if (musicFile) {
+          const videoResp = await fetch(media);
+          const videoBlob = await videoResp.blob();
+          const videoDur = await new Promise(res => {
+            const v = document.createElement("video");
+            v.src = media; v.onloadedmetadata = () => res(v.duration); v.load();
+          });
+          const muxed = await muxAudioIntoVideo(videoBlob, musicFile, videoDur);
+          setProcessing(false);
+          onDone(muxed, "video", musicFile, musicStart, musicVol);
+        } else {
+          setProcessing(false);
+          onDone(media, "video", null, 0, 1);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setProcessing(false);
+      toast("Export failed", { icon:"❌" });
     }
-    onDone(canvas.toDataURL("image/png"), [], musicFile);
   };
 
-  const PAINT_COLORS = ["#FF3B30","#FF9500","#FFFC00","#34C759","#007AFF","#AF52DE","#FFF","#000"];
+  const PAINT_COLORS = ["#FF3B30","#FF9500","#FFFC00","#34C759","#007AFF","#AF52DE","#FF2D78","#FFF","#000"];
+
+  const currentTextStyleObj = TEXT_STYLES.find(s => s.id === textStyle) || TEXT_STYLES[0];
 
   return (
     <div style={{ position:"absolute", inset:0, zIndex:55, background:"#000",
       display:"flex", flexDirection:"column", animation:"slideUp 0.25s ease" }}>
-      {/* Media preview */}
-      <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
+
+      {/* ── Media area ── */}
+      <div ref={wrapRef} style={{ flex:1, position:"relative", overflow:"hidden",
+        filter: mediaType === "photo"
+          ? `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`
+          : "none" }}>
+
         {mediaType === "video"
           ? <video src={media} style={{ width:"100%", height:"100%", objectFit:"cover" }} muted autoPlay loop />
           : <canvas ref={canvasRef}
               style={{ width:"100%", height:"100%", objectFit:"cover", display:"block",
-                cursor: tool === "paint" ? "crosshair" : "default",
+                cursor: tool === "paint" ? (paintMode === "eraser" ? "cell" : "crosshair") : "default",
                 touchAction: tool === "paint" ? "none" : "auto" }}
               onMouseDown={handlePaintStart} onMouseMove={handlePaintMove} onMouseUp={() => setPainting(false)}
               onTouchStart={handlePaintStart} onTouchMove={handlePaintMove} onTouchEnd={() => setPainting(false)}
@@ -415,170 +806,374 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
         }
 
         {/* Draggable text overlays */}
-        {texts.map(t => (
-          <div key={t.id}
-            style={{ position:"absolute", left:`${t.x}%`, top:`${t.y}%`, transform:"translate(-50%,-50%)",
-              color:t.color, fontWeight:700, fontSize:22, textShadow:"0 1px 4px rgba(0,0,0,0.9)",
-              cursor:"move", userSelect:"none", fontFamily:"'SF Pro Text',sans-serif",
-              WebkitTextStroke:"0.5px rgba(0,0,0,0.6)" }}
-            onMouseDown={e => {
-              e.preventDefault();
-              const startX = e.clientX; const startY = e.clientY;
-              const origX = t.x; const origY = t.y;
-              const el = e.currentTarget.closest("[data-editwrap]") || document.body;
-              const rect = el.getBoundingClientRect();
-              const onMove = (ev) => {
-                setTexts(prev => prev.map(tx => tx.id === t.id ? {
-                  ...tx,
-                  x: Math.max(5, Math.min(95, origX + (ev.clientX - startX) / rect.width * 100)),
-                  y: Math.max(5, Math.min(95, origY + (ev.clientY - startY) / rect.height * 100)),
-                } : tx));
-              };
-              const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-              window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+        {texts.map(t => {
+          const styleObj = TEXT_STYLES.find(s => s.id === t.style) || TEXT_STYLES[0];
+          const styleProps = styleObj.render(t.text, t.color);
+          return (
+            <div key={t.id}
+              style={{ position:"absolute", left:`${t.x}%`, top:`${t.y}%`,
+                transform:`translate(-50%,-50%) rotate(${t.rotation||0}deg)`,
+                cursor:"move", userSelect:"none",
+                fontFamily:"'DM Sans',sans-serif", fontWeight:700,
+                fontSize: t.size || 26, whiteSpace:"nowrap",
+                ...styleProps,
+                outline: selectedText === t.id ? `2px dashed ${BRAND.yellow}` : "none",
+                outlineOffset:4, borderRadius: styleProps.borderRadius || 0,
+              }}
+              onMouseDown={e => makeDraggable(t.id, e, false)}
+              onTouchStart={e => makeDraggable(t.id, e, true)}
+              onDoubleClick={() => deleteText(t.id)}
+            >
+              {t.text}
+              {selectedText === t.id && (
+                <span onClick={(e) => { e.stopPropagation(); deleteText(t.id); }}
+                  style={{ position:"absolute", top:-12, right:-12, background:BRAND.red,
+                    borderRadius:"50%", width:20, height:20, display:"flex", alignItems:"center",
+                    justifyContent:"center", fontSize:12, cursor:"pointer", color:"#fff", fontWeight:900 }}>✕</span>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Draggable stickers */}
+        {stickers.map(s => (
+          <div key={s.id}
+            style={{ position:"absolute", left:`${s.x}%`, top:`${s.y}%`,
+              transform:"translate(-50%,-50%)", cursor:"move", userSelect:"none",
+              fontSize: s.size || 40, lineHeight:1,
+              filter: selectedText === s.id ? `drop-shadow(0 0 8px ${BRAND.yellow})` : "none",
             }}
-          >{t.text}</div>
+            onMouseDown={e => makeDraggable(s.id, e, false)}
+            onTouchStart={e => makeDraggable(s.id, e, true)}
+            onDoubleClick={() => setStickers(prev => prev.filter(x => x.id !== s.id))}
+          >
+            {s.emoji}
+            {selectedText === s.id && (
+              <span onClick={(e) => { e.stopPropagation(); setStickers(prev => prev.filter(x => x.id !== s.id)); }}
+                style={{ position:"absolute", top:-10, right:-10, background:BRAND.red,
+                  borderRadius:"50%", width:18, height:18, display:"flex", alignItems:"center",
+                  justifyContent:"center", fontSize:11, cursor:"pointer", color:"#fff" }}>✕</span>
+            )}
+          </div>
         ))}
 
-        {/* Crop overlay */}
-        {tool === "crop" && (
-          <div style={{ position:"absolute", inset:0, pointerEvents:"none" }}>
-            <div style={{ position:"absolute",
-              left:`${cropBox.x*100}%`, top:`${cropBox.y*100}%`,
-              width:`${cropBox.w*100}%`, height:`${cropBox.h*100}%`,
-              border:"2px solid #FFFC00", boxShadow:"0 0 0 9999px rgba(0,0,0,0.55)" }}>
-              <div style={{ position:"absolute", inset:0, display:"grid",
-                gridTemplateColumns:"1fr 1fr 1fr", gridTemplateRows:"1fr 1fr 1fr" }}>
-                {[...Array(9)].map((_,i) => (
-                  <div key={i} style={{ border:"0.5px solid rgba(255,252,0,0.3)" }} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Music badge */}
+        {/* Music waveform badge */}
         {musicName && (
-          <div style={{ position:"absolute", bottom:16, left:16,
-            background:"rgba(0,0,0,0.75)", borderRadius:20, padding:"6px 14px",
-            display:"flex", alignItems:"center", gap:6, backdropFilter:"blur(10px)" }}>
-            <Music size={14} color={BRAND.yellow} />
-            <span style={{ color:"#FFF", fontSize:12, maxWidth:160, overflow:"hidden",
-              textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{musicName}</span>
+          <div style={{ position:"absolute", bottom:14, left:14, right:14,
+            background:"rgba(0,0,0,0.72)", borderRadius:16,
+            padding:"8px 14px", display:"flex", alignItems:"center", gap:10,
+            backdropFilter:"blur(16px)", border:"0.5px solid rgba(255,255,255,0.12)" }}>
+            <Music size={14} color={BRAND.yellow} style={{ flexShrink:0 }} />
+            {/* Waveform visualiser */}
+            <div style={{ flex:1, display:"flex", alignItems:"center", gap:1.5, height:22, overflow:"hidden" }}>
+              {(audioPeaks.length ? audioPeaks : Array(40).fill(0.3)).map((p, i) => (
+                <div key={i} style={{
+                  flex:1, borderRadius:2,
+                  height: `${Math.max(15, p * 100)}%`,
+                  background: i / audioPeaks.length < musicStart / 30
+                    ? "rgba(255,252,0,0.9)"
+                    : "rgba(255,255,255,0.35)",
+                  transition:"height 0.1s",
+                }} />
+              ))}
+            </div>
+            <span style={{ color:"rgba(255,255,255,0.7)", fontSize:11, flexShrink:0,
+              maxWidth:90, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {musicName}
+            </span>
           </div>
         )}
 
         {/* Top bar */}
         <div style={{ position:"absolute", top:0, left:0, right:0,
-          padding:"12px 16px", display:"flex", justifyContent:"space-between",
-          background:"linear-gradient(180deg,rgba(0,0,0,0.5) 0%,rgba(0,0,0,0) 100%)" }}>
-          <button onClick={onDiscard} style={{ background:"rgba(255,255,255,0.15)",
-            border:"none", borderRadius:30, padding:"8px 16px",
-            color:"#FFF", fontSize:14, cursor:"pointer" }}>✕ Discard</button>
-          <button onClick={handleDone} style={{ background:BRAND.yellow,
-            border:"none", borderRadius:30, padding:"8px 20px",
-            color:"#000", fontWeight:700, fontSize:14, cursor:"pointer" }}>
-            <Check size={16} style={{ display:"inline", marginRight:4 }} />Done
-          </button>
+          padding:"48px 14px 14px",
+          background:"linear-gradient(180deg,rgba(0,0,0,0.6) 0%,transparent 100%)",
+          display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <button onClick={onDiscard}
+            style={{ background:"rgba(0,0,0,0.45)", border:"0.5px solid rgba(255,255,255,0.2)",
+              backdropFilter:"blur(10px)", borderRadius:24, padding:"8px 16px",
+              color:"#FFF", fontSize:13, fontWeight:600, cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif" }}>✕ Discard</button>
+
+          <div style={{ display:"flex", gap:8 }}>
+            {mediaType === "photo" && (
+              <button onClick={undo}
+                style={{ background:"rgba(0,0,0,0.45)", border:"0.5px solid rgba(255,255,255,0.15)",
+                  backdropFilter:"blur(10px)", borderRadius:24, width:38, height:38,
+                  display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+                <RotateCcw size={16} color="#FFF" />
+              </button>
+            )}
+            <button onClick={handleDone} disabled={processing}
+              style={{ background: processing ? "#666" : BRAND.yellow,
+                border:"none", borderRadius:24, padding:"8px 20px",
+                color:"#000", fontWeight:700, fontSize:14, cursor: processing ? "default" : "pointer",
+                fontFamily:"'DM Sans',sans-serif", display:"flex", alignItems:"center", gap:6,
+                transition:"background 0.2s" }}>
+              {processing
+                ? <><span style={{ fontSize:16 }}>⏳</span> Saving...</>
+                : <><Check size={15} /> Done</>}
+            </button>
+          </div>
         </div>
+
+        {/* Tap-to-deselect */}
+        {selectedText && (
+          <div style={{ position:"absolute", inset:0, zIndex:-1 }}
+            onClick={() => setSelectedText(null)} />
+        )}
       </div>
 
-      {/* Tool panel */}
-      <div style={{ background:"#0A0A0A", borderTop:"0.5px solid #2C2C2C" }}>
+      {/* ── Tool panel ── */}
+      <div style={{ background:"#0C0C0C", borderTop:"0.5px solid rgba(255,255,255,0.08)" }}>
+
         {/* Tool row */}
-        <div style={{ display:"flex", justifyContent:"space-around", padding:"12px 8px 8px" }}>
+        <div style={{ display:"flex", justifyContent:"space-around", padding:"10px 4px 6px" }}>
           {[
-            { id:"crop",  icon:<Scissors size={20}/>, label:"Snip" },
-            { id:"text",  icon:<Type size={20}/>,     label:"Text" },
-            { id:"paint", icon:<Pen size={20}/>,      label:"Paint" },
-            { id:"music", icon:<Music size={20}/>,    label:"Music" },
+            { id:"text",   icon:<Type size={19}/>,    label:"Text" },
+            { id:"paint",  icon:<Pen size={19}/>,     label:"Draw" },
+            { id:"sticker",icon:<Smile size={19}/>,   label:"Sticker" },
+            { id:"adjust", icon:<Sparkles size={19}/>,label:"Adjust" },
+            { id:"music",  icon:<Music size={19}/>,   label:"Sound" },
           ].map(t => (
             <button key={t.id} onClick={() => setTool(tool === t.id ? null : t.id)}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-                background:"none", border:"none", cursor:"pointer",
-                color: tool === t.id ? BRAND.yellow : "#858585",
-                transition:"color 0.15s" }}>
+              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                background: tool === t.id ? "rgba(255,252,0,0.12)" : "none",
+                border: tool === t.id ? `1px solid rgba(255,252,0,0.3)` : "1px solid transparent",
+                borderRadius:12, padding:"6px 10px",
+                cursor:"pointer", color: tool === t.id ? BRAND.yellow : "#666",
+                transition:"all 0.15s", minWidth:52 }}>
               {t.icon}
-              <span style={{ fontSize:10, fontFamily:"sans-serif" }}>{t.label}</span>
+              <span style={{ fontSize:9, fontFamily:"'DM Sans',sans-serif", fontWeight:600, letterSpacing:"0.3px" }}>{t.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Sub-panels */}
+        {/* ── Text panel ── */}
         {tool === "text" && (
-          <div style={{ padding:"8px 16px 16px", display:"flex", flexDirection:"column", gap:10 }}>
-            <div style={{ display:"flex", gap:8 }}>
-              {["#FFFC00","#FFF","#FF3B30","#007AFF","#34C759","#FF9500"].map(c => (
-                <button key={c} onClick={() => setTextColor(c)}
-                  style={{ width:28, height:28, borderRadius:"50%", background:c, border:"none",
-                    cursor:"pointer", outline: textColor === c ? `3px solid ${BRAND.yellow}` : "none",
-                    outlineOffset:2 }} />
+          <div style={{ padding:"10px 14px 16px", display:"flex", flexDirection:"column", gap:10,
+            borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
+            {/* Style chips */}
+            <div style={{ display:"flex", gap:6, overflowX:"auto" }}>
+              {TEXT_STYLES.map(s => (
+                <button key={s.id} onClick={() => setTextStyle(s.id)}
+                  style={{ padding:"4px 12px", borderRadius:20, border:"none", cursor:"pointer",
+                    background: textStyle === s.id ? BRAND.yellow : "#1E1E1E",
+                    color: textStyle === s.id ? "#000" : "#AAA",
+                    fontSize:11, fontWeight:700, fontFamily:"'DM Sans',sans-serif", flexShrink:0 }}>
+                  {s.label}
+                </button>
               ))}
             </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <input value={textInput} onChange={e => setTextInput(e.target.value)}
-                placeholder="Add text..."
-                onKeyDown={e => e.key === "Enter" && addText()}
-                style={{ flex:1, background:"#1A1A1A", border:"none", borderRadius:20,
-                  padding:"10px 16px", color:"#FFF", fontSize:15, outline:"none" }}
-                autoFocus />
-              <button onClick={addText} style={{ background:BRAND.yellow, border:"none",
-                borderRadius:20, padding:"10px 18px", fontWeight:700, cursor:"pointer", color:"#000" }}>Add</button>
+            {/* Color row */}
+            <div style={{ display:"flex", gap:7, alignItems:"center" }}>
+              {["#FFFC00","#FFF","#FF3B30","#FF9500","#34C759","#007AFF","#AF52DE","#FF2D78","#000"].map(c => (
+                <button key={c} onClick={() => setTextColor(c)}
+                  style={{ width:26, height:26, borderRadius:"50%", background:c,
+                    border: c === "#FFF" ? "1px solid #444" : "none", cursor:"pointer", flexShrink:0,
+                    outline: textColor === c ? `3px solid ${BRAND.yellow}` : "none", outlineOffset:2,
+                    transform: textColor === c ? "scale(1.2)" : "scale(1)", transition:"transform 0.15s" }} />
+              ))}
             </div>
+            {/* Size + input row */}
+            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+              <button onClick={() => setTextSize(s => Math.max(14, s - 4))}
+                style={{ background:"#1E1E1E", border:"none", borderRadius:8, width:32, height:32,
+                  color:"#FFF", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <ChevronDown size={16} />
+              </button>
+              <div style={{ flex:1, display:"flex", gap:8 }}>
+                <input value={textInput} onChange={e => setTextInput(e.target.value)}
+                  placeholder="Add text..."
+                  onKeyDown={e => e.key === "Enter" && addText()}
+                  style={{ flex:1, background:"#1A1A1A", border:"0.5px solid rgba(255,255,255,0.1)",
+                    borderRadius:20, padding:"9px 16px", color:"#FFF", fontSize:15, outline:"none",
+                    fontFamily:"'DM Sans',sans-serif" }} autoFocus />
+                <button onClick={addText}
+                  style={{ background:BRAND.yellow, border:"none", borderRadius:20,
+                    padding:"9px 18px", fontWeight:700, cursor:"pointer", color:"#000",
+                    fontFamily:"'DM Sans',sans-serif", fontSize:14 }}>Add</button>
+              </div>
+              <button onClick={() => setTextSize(s => Math.min(64, s + 4))}
+                style={{ background:"#1E1E1E", border:"none", borderRadius:8, width:32, height:32,
+                  color:"#FFF", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <ChevronUp size={16} />
+              </button>
+            </div>
+            <p style={{ color:"#555", fontSize:11, textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+              Drag to move · Double-tap to delete
+            </p>
           </div>
         )}
 
+        {/* ── Paint panel ── */}
         {tool === "paint" && (
-          <div style={{ padding:"8px 16px 16px", display:"flex", flexDirection:"column", gap:10 }}>
-            <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <div style={{ padding:"10px 14px 16px", display:"flex", flexDirection:"column", gap:10,
+            borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
+            {/* Mode chips */}
+            <div style={{ display:"flex", gap:6 }}>
+              {[{id:"pen",label:"✏️ Pen"},{id:"neon",label:"⚡ Neon"},{id:"eraser",label:"⬜ Erase"}].map(m => (
+                <button key={m.id} onClick={() => setPaintMode(m.id)}
+                  style={{ padding:"4px 14px", borderRadius:20, border:"none", cursor:"pointer",
+                    background: paintMode === m.id ? BRAND.yellow : "#1E1E1E",
+                    color: paintMode === m.id ? "#000" : "#AAA",
+                    fontSize:11, fontWeight:700, fontFamily:"'DM Sans',sans-serif" }}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            {/* Color swatches */}
+            <div style={{ display:"flex", gap:7, alignItems:"center" }}>
               {PAINT_COLORS.map(c => (
                 <button key={c} onClick={() => setPaintColor(c)}
-                  style={{ width:28, height:28, borderRadius:"50%", background:c,
-                    border: c === "#FFF" ? "1px solid #333" : "none", cursor:"pointer",
-                    outline: paintColor === c ? `3px solid ${BRAND.yellow}` : "none", outlineOffset:2 }} />
+                  style={{ width:26, height:26, borderRadius:"50%", background:c,
+                    border: c === "#FFF" ? "1px solid #444" : "none", cursor:"pointer", flexShrink:0,
+                    outline: paintColor === c ? `3px solid ${BRAND.yellow}` : "none", outlineOffset:2,
+                    transform: paintColor === c ? "scale(1.2)" : "scale(1)", transition:"transform 0.15s" }} />
               ))}
             </div>
+            {/* Size slider */}
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ color:"#858585", fontSize:12 }}>Size</span>
-              <input type="range" min={2} max={24} value={paintSize}
+              <div style={{ width:paintSize*2.2, height:paintSize*2.2, borderRadius:"50%",
+                background: paintMode === "eraser" ? "#333" : paintColor,
+                border: paintMode === "eraser" ? "1.5px dashed #666" : "none",
+                minWidth:6, minHeight:6, flexShrink:0, transition:"all 0.15s",
+                boxShadow: paintMode === "neon" ? `0 0 10px ${paintColor}` : "none" }} />
+              <input type="range" min={2} max={20} value={paintSize}
                 onChange={e => setPaintSize(Number(e.target.value))}
                 style={{ flex:1, accentColor:BRAND.yellow }} />
-              <div style={{ width:paintSize*2, height:paintSize*2, borderRadius:"50%",
-                background:paintColor, minWidth:4, minHeight:4 }} />
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button onClick={undo}
+                style={{ background:"none", border:"none", cursor:"pointer",
+                  color:"#555", fontSize:12, fontFamily:"'DM Sans',sans-serif",
+                  display:"flex", alignItems:"center", gap:4 }}>
+                <RotateCcw size={12} /> Undo stroke
+              </button>
             </div>
           </div>
         )}
 
-        {tool === "music" && (
-          <div style={{ padding:"8px 16px 20px" }}>
-            <button onClick={() => musicInputRef.current?.click()}
-              style={{ width:"100%", padding:"14px", borderRadius:20,
-                background:"#1A1A1A", border:"1.5px dashed #2C2C2C", cursor:"pointer",
-                color:"#FFF", display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-              <Mic size={18} color={BRAND.yellow} />
-              <span>Pick from local storage</span>
-            </button>
-            <input ref={musicInputRef} type="file" accept="audio/*"
-              style={{ display:"none" }} onChange={handleMusicPick} />
-            {musicName && (
-              <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:8 }}>
-                <Music size={14} color={BRAND.yellow} />
-                <span style={{ color:"#FFF", fontSize:13 }}>{musicName}</span>
-                <button onClick={() => { setMusicFile(null); setMusicName(null);
-                  if(audioRef.current){audioRef.current.pause();audioRef.current.src="";} }}
-                  style={{ marginLeft:"auto", background:"none", border:"none",
-                    color:"#858585", cursor:"pointer", fontSize:13 }}>Remove</button>
+        {/* ── Sticker panel ── */}
+        {tool === "sticker" && (
+          <div style={{ padding:"10px 14px 16px", borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
+              {STICKERS.map(emoji => (
+                <button key={emoji} onClick={() => {
+                  setStickers(prev => [...prev, {
+                    id: Date.now() + Math.random(), emoji, x:50, y:40, size:44
+                  }]);
+                  toast(`${emoji} Added!`, { icon: emoji });
+                }}
+                  style={{ fontSize:30, background:"#1A1A1A", border:"none",
+                    borderRadius:12, width:50, height:50, cursor:"pointer",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    transition:"transform 0.1s" }}
+                  onMouseDown={e => e.currentTarget.style.transform="scale(0.85)"}
+                  onMouseUp={e => e.currentTarget.style.transform="scale(1)"}
+                >{emoji}</button>
+              ))}
+            </div>
+            <p style={{ color:"#555", fontSize:11, textAlign:"center", marginTop:8,
+              fontFamily:"'DM Sans',sans-serif" }}>
+              Double-tap sticker to delete
+            </p>
+          </div>
+        )}
+
+        {/* ── Adjust panel (photos only) ── */}
+        {tool === "adjust" && (
+          <div style={{ padding:"10px 14px 16px", display:"flex", flexDirection:"column", gap:12,
+            borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
+            {[
+              { label:"☀️ Brightness", val:brightness, set:setBrightness, min:50, max:200 },
+              { label:"◑ Contrast",   val:contrast,   set:setContrast,   min:50, max:200 },
+              { label:"🎨 Saturation", val:saturation, set:setSaturation, min:0,  max:300 },
+            ].map(({ label, val, set, min, max }) => (
+              <div key={label} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ color:"#AAA", fontSize:12, fontFamily:"'DM Sans',sans-serif",
+                  width:110, flexShrink:0 }}>{label}</span>
+                <input type="range" min={min} max={max} value={val}
+                  onChange={e => set(Number(e.target.value))}
+                  style={{ flex:1, accentColor:BRAND.yellow }} />
+                <button onClick={() => set(100)}
+                  style={{ background:"none", border:"none", cursor:"pointer",
+                    color:"#555", fontSize:11 }}>↺</button>
               </div>
+            ))}
+            {mediaType === "video" && (
+              <p style={{ color:"#444", fontSize:11, textAlign:"center", fontFamily:"'DM Sans',sans-serif" }}>
+                Adjust applies to photos only
+              </p>
             )}
           </div>
         )}
 
-        {tool === "crop" && (
-          <div style={{ padding:"8px 16px 20px", color:"#858585", fontSize:13, textAlign:"center" }}>
-            Crop overlay active — tap Done to apply
+        {/* ── Music / Sound panel ── */}
+        {tool === "music" && (
+          <div style={{ padding:"10px 14px 18px", borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
+            {!musicFile ? (
+              <button onClick={() => musicInputRef.current?.click()}
+                style={{ width:"100%", padding:"16px", borderRadius:16,
+                  background:"linear-gradient(135deg,#1A1A1A 0%,#0E0E0E 100%)",
+                  border:"1px dashed rgba(255,252,0,0.3)", cursor:"pointer",
+                  color:"#FFF", display:"flex", alignItems:"center", justifyContent:"center", gap:12 }}>
+                <div style={{ width:40, height:40, borderRadius:"50%",
+                  background:"rgba(255,252,0,0.12)", border:"1px solid rgba(255,252,0,0.3)",
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <Music size={18} color={BRAND.yellow} />
+                </div>
+                <div style={{ textAlign:"left" }}>
+                  <div style={{ fontWeight:700, fontSize:14, fontFamily:"'DM Sans',sans-serif" }}>Add Sound</div>
+                  <div style={{ color:"#555", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>Pick an audio file</div>
+                </div>
+              </button>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10,
+                  background:"#1A1A1A", borderRadius:14, padding:"10px 14px" }}>
+                  <Music size={16} color={BRAND.yellow} />
+                  <span style={{ flex:1, color:"#FFF", fontSize:13, fontFamily:"'DM Sans',sans-serif",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{musicName}</span>
+                  <button onClick={() => {
+                    setMusicFile(null); setMusicName(null); setAudioPeaks([]);
+                    if(audioRef.current){ audioRef.current.pause(); audioRef.current.src=""; }
+                  }} style={{ background:"none", border:"none", cursor:"pointer", color:"#555" }}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ color:"#666", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>🔊 Volume</span>
+                    <span style={{ color:"#AAA", fontSize:11 }}>{Math.round(musicVol*100)}%</span>
+                  </div>
+                  <input type="range" min={0} max={1} step={0.05} value={musicVol}
+                    onChange={e => setMusicVol(Number(e.target.value))}
+                    style={{ width:"100%", accentColor:BRAND.yellow }} />
+                </div>
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ color:"#666", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>▶ Start at</span>
+                    <span style={{ color:"#AAA", fontSize:11 }}>{musicStart}s</span>
+                  </div>
+                  <input type="range" min={0} max={30} step={0.5} value={musicStart}
+                    onChange={e => setMusicStart(Number(e.target.value))}
+                    style={{ width:"100%", accentColor:BRAND.yellow }} />
+                </div>
+                <button onClick={() => musicInputRef.current?.click()}
+                  style={{ background:"#1A1A1A", border:"0.5px solid rgba(255,255,255,0.1)",
+                    borderRadius:12, padding:"8px", color:"#AAA", cursor:"pointer", fontSize:12,
+                    fontFamily:"'DM Sans',sans-serif" }}>
+                  Change track
+                </button>
+              </div>
+            )}
+            <input ref={musicInputRef} type="file" accept="audio/*"
+              style={{ display:"none" }} onChange={handleMusicPick} />
           </div>
         )}
       </div>
+
       <audio ref={audioRef} loop style={{ display:"none" }} />
     </div>
   );
@@ -798,7 +1393,7 @@ export default function SnipChat() {
         html, body, #root { height: 100%; background: #000; }
         ::-webkit-scrollbar { display: none; }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        @keyframes toastPop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes toastSlide { from { transform: translateY(-12px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes recPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.6); } 50% { box-shadow: 0 0 0 8px rgba(255,59,48,0); } }
       `}</style>
@@ -967,8 +1562,8 @@ export default function SnipChat() {
             mediaType={captured.type}
             toast={toast}
             onDiscard={() => setEditing(false)}
-            onDone={(newMedia, _texts, _music) => {
-              setCaptured({ media: newMedia, type: captured.type });
+            onDone={(newMedia, newType, musicUrl, musicStartSec, musicVolume) => {
+              setCaptured({ media: newMedia, type: newType || captured.type });
               setEditing(false);
               toast("Edits applied!", { icon: "✂️" });
             }}
