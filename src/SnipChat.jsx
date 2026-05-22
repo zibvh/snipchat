@@ -176,19 +176,16 @@ function FilterCarousel({ filters, activeId, onSelect, videoRef }) {
 }
 
 // ─── Permission Gate ──────────────────────────────────────────────────────────
-function PermissionGate({ state, onRequest }) {
-  const isAsking = state === CAM_STATE.ASKING;
+function SplashScreen({ state }) {
+  if (state === CAM_STATE.GRANTED) return null;
   return (
-    <div style={{ position:"absolute", inset:0, zIndex:100, background:BRAND.dark,
+    <div style={{ position:"absolute", inset:0, zIndex:100, background:"#000",
       display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-      padding:32, gap:24, textAlign:"center" }}>
-      <SnipLogo size={80} />
-      <h1 style={{ fontSize:28, fontWeight:700, color:BRAND.yellow, letterSpacing:"-0.5px" }}>SnipChat</h1>
-      <p style={{ color:"#858585", fontSize:14 }}>Tap & hold to record · Tap to snap</p>
-      <button onClick={onRequest} disabled={isAsking} style={{ padding:"14px 32px", borderRadius:30,
-        background:BRAND.yellow, border:"none", color:"#000", fontWeight:700, fontSize:16, cursor:"pointer" }}>
-        {isAsking ? "Opening camera..." : "Continue"}
-      </button>
+      gap:16, pointerEvents:"none",
+      transition:"opacity 0.4s ease",
+      opacity: state === CAM_STATE.ASKING ? 1 : 0 }}>
+      <SnipLogo size={72} />
+      <h1 style={{ fontSize:26, fontWeight:800, color:BRAND.yellow, letterSpacing:"-0.5px", margin:0 }}>SnipChat</h1>
     </div>
   );
 }
@@ -1274,12 +1271,16 @@ export default function SnipChat() {
     setCamState(CAM_STATE.ASKING);
     streamRef.current?.getTracks().forEach(t => t.stop());
     try {
-      // Request native camera + microphone permissions via Capacitor (required on Android)
-      const perms = await Camera.requestPermissions({ permissions: ["camera"] });
-      if (perms.camera !== "granted") {
-        setCamState(CAM_STATE.DENIED);
-        return;
-      }
+      // Request native permissions via Capacitor when running as an Android app.
+      // On plain web/browser this will throw — we catch and fall through to getUserMedia
+      // which triggers the browser's own permission prompt.
+      try {
+        const perms = await Camera.requestPermissions({ permissions: ["camera"] });
+        if (perms.camera !== "granted") {
+          setCamState(CAM_STATE.DENIED);
+          return;
+        }
+      } catch (_) { /* running in browser — getUserMedia will handle its own prompt */ }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 1280 } },
         audio: true,
@@ -1441,7 +1442,7 @@ export default function SnipChat() {
       <div style={{ width:"100%", maxWidth:450, margin:"0 auto", height:"100dvh",
         background:"#000", position:"relative", overflow:"hidden" }}>
 
-        {camState !== CAM_STATE.GRANTED && <PermissionGate state={camState} onRequest={() => startCamera()} />}
+        <SplashScreen state={camState} />
         <ToastContainer toasts={toasts} />
 
         {/* Top bar */}
