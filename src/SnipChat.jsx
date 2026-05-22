@@ -371,11 +371,16 @@ async function muxAudioIntoVideo(videoBlob, audioUrl, durationSec) {
     // Audio destination stream
     const audioCtx2 = new (window.AudioContext || window.webkitAudioContext)();
     const dest = audioCtx2.createMediaStreamDestination();
-    const audioEl = new Audio(wavUrl);
-    audioEl.loop = true;
-    const srcNode = audioCtx2.createMediaElementSource(audioEl);
-    srcNode.connect(dest);
-    srcNode.connect(audioCtx2.destination);
+    
+    // Decode and play audio via buffer source instead of Audio element
+    const audioResp2 = await fetch(audioUrl);
+    const audioBuf = await audioResp2.blob();
+    const decodedBuf = await audioCtx2.decodeAudioData(await audioBuf.arrayBuffer());
+    const src = audioCtx2.createBufferSource();
+    src.buffer = decodedBuf;
+    src.loop = true;
+    src.connect(dest);
+    src.start(0);
 
     const canvasStream = canvas.captureStream(30);
     const combinedStream = new MediaStream([
@@ -396,7 +401,6 @@ async function muxAudioIntoVideo(videoBlob, audioUrl, durationSec) {
         resolve(URL.createObjectURL(finalBlob));
       };
 
-      videoEl.onplay = () => { /* draw loop starts */ };
       const draw = () => {
         if (videoEl.ended || videoEl.paused) return;
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
@@ -404,11 +408,13 @@ async function muxAudioIntoVideo(videoBlob, audioUrl, durationSec) {
       };
 
       recorder.start(100);
-      audioEl.play();
       videoEl.play().then(() => {
         draw();
         const dur = (videoEl.duration || durationToUse) * 1000;
-        setTimeout(() => { recorder.stop(); videoEl.pause(); audioEl.pause(); }, dur);
+        setTimeout(() => { recorder.stop(); videoEl.pause(); }, dur);
+      }).catch(err => {
+        console.warn("Video playback failed:", err);
+        recorder.stop();
       });
     });
   } catch (err) {
@@ -431,11 +437,17 @@ async function photoWithAudioToVideo(imageDataUrl, audioUrl, durationSec = 5) {
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const dest = audioCtx.createMediaStreamDestination();
-    const audioEl = new Audio(audioUrl);
-    audioEl.loop = true;
-    const srcNode = audioCtx.createMediaElementSource(audioEl);
-    srcNode.connect(dest);
-    srcNode.connect(audioCtx.destination);
+    
+    // Load and decode audio to ensure it plays
+    const audioResp = await fetch(audioUrl);
+    const audioBlob = await audioResp.blob();
+    const audioBuffer = await audioCtx.decodeAudioData(await audioBlob.arrayBuffer());
+    
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.loop = true;
+    source.connect(dest);
+    source.start(0);
 
     const canvasStream = canvas.captureStream(30);
     const combined = new MediaStream([
@@ -455,8 +467,7 @@ async function photoWithAudioToVideo(imageDataUrl, audioUrl, durationSec = 5) {
         resolve({ url: URL.createObjectURL(new Blob(chunks, { type: mimeType })), type: "video" });
       };
       recorder.start(100);
-      audioEl.play();
-      setTimeout(() => { recorder.stop(); audioEl.pause(); }, durationSec * 1000);
+      setTimeout(() => { recorder.stop(); }, durationSec * 1000);
     });
   } catch (err) {
     console.warn("Photo+audio encode failed:", err);
@@ -677,7 +688,11 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
       audioRef.current.src = url;
       audioRef.current.currentTime = musicStart;
       audioRef.current.volume = musicVol;
-      audioRef.current.play();
+      // Try to play, but handle autoplay restrictions gracefully
+      audioRef.current.play().catch(err => {
+        console.warn("Audio autoplay blocked (browser policy):", err);
+        // Audio will play when user interacts with controls
+      });
     }
     toast(`🎵 ${file.name.replace(/\.[^.]+$/, "")}`, { icon:"🎵" });
     setTool(null);
@@ -1348,14 +1363,32 @@ export default function SnipChat() {
     toast(next === "user" ? "Front cam" : "Back cam", { icon: "🔄" });
   };
 
-  const saveToStorage = (media, type) => {
-    const snap = { id: Date.now(), media, type };
-    setSavedSnaps(prev => {
-      const updated = [snap, ...prev].slice(0, 50);
-      try { localStorage.setItem("snipChat_saved", JSON.stringify(updated)); } catch {}
-      return updated;
-    });
-    toast("Saved to gallery!", { icon: "💾" });
+  const saveToStorage = async (media, type) => {
+    try {
+      let mediaToStore = media;
+      
+      // Convert blob URLs (videos) to base64 data URLs for persistent storage
+      if (type === "video" && media.startsWith("blob:")) {
+        const response = await fetch(media);
+        const blob = await response.blob();
+        mediaToStore = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      }
+      
+      const snap = { id: Date.now(), media: mediaToStore, type };
+      setSavedSnaps(prev => {
+        const updated = [snap, ...prev].slice(0, 50);
+        try { localStorage.setItem("snipChat_saved", JSON.stringify(updated)); } catch {}
+        return updated;
+      });
+      toast("Saved to gallery!", { icon: "💾" });
+    } catch (err) {
+      console.error("Save failed:", err);
+      toast("Save failed", { icon: "❌" });
+    }
   };
 
   const downloadSnap = (media, type) => {
