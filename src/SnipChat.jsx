@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
-import { Camera } from "@capacitor/camera";
+import { CameraPreview } from "@capacitor-community/camera-preview";
 import { MessageCircle, User, RefreshCw, X, Zap, Sparkles, Download, Scissors, Type, Pen, Music, Share2, Check, Mic, Smile, Trash2, ChevronUp, ChevronDown, RotateCcw, Eye } from "lucide-react";
 
 const BRAND = {
@@ -1266,36 +1266,44 @@ export default function SnipChat() {
   const { toasts, toast } = useToast();
   const currentFilter = FILTERS.find(f => f.id === activeFilter);
 
+  const isNative = useRef(!!(typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.()));
+
   const startCamera = useCallback(async (mode) => {
     const m = mode ?? facingMode;
     setCamState(CAM_STATE.ASKING);
-    streamRef.current?.getTracks().forEach(t => t.stop());
     try {
-      // Request native permissions via Capacitor when running as an Android app.
-      // On plain web/browser this will throw — we catch and fall through to getUserMedia
-      // which triggers the browser's own permission prompt.
-      try {
-        const perms = await Camera.requestPermissions({ permissions: ["camera"] });
-        if (perms.camera !== "granted") {
-          setCamState(CAM_STATE.DENIED);
-          return;
-        }
-      } catch (_) { /* running in browser — getUserMedia will handle its own prompt */ }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 1280 } },
-        audio: true,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      if (isNative.current) {
+        // Native Android/iOS: CameraPreview renders a native layer behind the WebView
+        try { await CameraPreview.stop(); } catch (_) {}
+        await CameraPreview.start({
+          position: m === "user" ? "front" : "rear",
+          toBack: true,
+          width: window.screen.width,
+          height: window.screen.height,
+          enableAudio: true,
+        });
+        document.documentElement.style.background = "transparent";
+        document.body.style.background = "transparent";
+      } else {
+        // Browser fallback
+        streamRef.current?.getTracks().forEach(t => t.stop());
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: m, width: { ideal: 1280 }, height: { ideal: 1280 } },
+          audio: true,
+        });
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); }
+      }
       setCamState(CAM_STATE.GRANTED);
     } catch { setCamState(CAM_STATE.DENIED); }
   }, [facingMode]);
 
   useEffect(() => { startCamera(); }, [startCamera]);
 
-  // Canvas draw loop
+  // Canvas draw loop — only needed in browser (native uses CameraPreview layer)
   useEffect(() => {
     if (camState !== CAM_STATE.GRANTED) return;
+    if (isNative.current) return; // native camera renders behind WebView, no canvas needed
     const draw = () => {
       const video = videoRef.current, canvas = canvasRef.current;
       if (video && canvas && video.readyState >= 2) {
@@ -1323,16 +1331,22 @@ export default function SnipChat() {
     cancelAnimationFrame(animRef.current);
   }, []);
 
-  const handleCapture = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const handleCapture = async () => {
     setFlash(true); setTimeout(() => setFlash(false), 200);
-    setCaptured({ media: canvas.toDataURL("image/png"), type: "photo" });
+    if (isNative.current) {
+      // Native: grab frame from CameraPreview
+      const result = await CameraPreview.capture({ quality: 90 });
+      setCaptured({ media: `data:image/jpeg;base64,${result.value}`, type: "photo" });
+    } else {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      setCaptured({ media: canvas.toDataURL("image/png"), type: "photo" });
+    }
     toast("Snap taken!", { icon: "📸" });
   };
 
   const startRecording = useCallback(() => {
-    if (!streamRef.current) return;
+    if (!isNative.current && !streamRef.current) return;
     recChunks.current = [];
     let mimeType = "video/webm;codecs=vp8,opus";
     if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";
@@ -1440,7 +1454,8 @@ export default function SnipChat() {
       `}</style>
 
       <div style={{ width:"100%", maxWidth:450, margin:"0 auto", height:"100dvh",
-        background:"#000", position:"relative", overflow:"hidden" }}>
+        background: camState === CAM_STATE.GRANTED ? "transparent" : "#000",
+        position:"relative", overflow:"hidden" }}>
 
         <SplashScreen state={camState} />
         <ToastContainer toasts={toasts} />
@@ -1482,8 +1497,10 @@ export default function SnipChat() {
         {/* Camera viewfinder */}
         <div style={{ position:"absolute", inset:0, overflow:"hidden" }}>
           <video ref={videoRef} playsInline muted style={{ display:"none" }} />
+          {/* On native, canvas is transparent — the CameraPreview layer shows through from behind */}
           <canvas ref={canvasRef} width={800} height={800}
-            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+            style={{ width:"100%", height:"100%", objectFit:"cover", display:"block",
+              background: camState === CAM_STATE.GRANTED ? "transparent" : "#000" }} />
           <div style={{ position:"absolute", inset:0, background:"#FFF",
             opacity: flash ? 1 : 0, transition:"opacity 0.15s ease", pointerEvents:"none" }} />
         </div>
