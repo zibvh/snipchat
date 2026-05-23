@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { CameraPreview } from "@capacitor-community/camera-preview";
-import { Filesystem, Directory, Encoding } from "@capacitor/filesystem";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { FilePicker } from "@capawesome/capacitor-file-picker";
 import { MessageCircle, User, RefreshCw, X, Zap, Sparkles, Download, Scissors, Type, Pen, Music, Share2, Check, Mic, Smile, Trash2, ChevronUp, ChevronDown, RotateCcw, Eye } from "lucide-react";
 
 const BRAND = {
@@ -720,24 +721,50 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
   };
 
   // ── Music ──
-  const handleMusicPick = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
+  const handleMusicPick = async (e) => {
+    let url, name;
+
+    // On native use the proper file picker — <input type="file"> is unreliable on Android
+    if (typeof window !== "undefined" && window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const result = await FilePicker.pickFiles({
+          types: ["audio/mpeg", "audio/mp4", "audio/ogg", "audio/wav", "audio/flac", "audio/aac", "audio/*"],
+          readData: true,
+          multiple: false,
+        });
+        const file = result.files[0];
+        if (!file) return;
+        // Convert base64 data to a blob URL the audio element can play
+        const mime = file.mimeType || "audio/mpeg";
+        const byteChars = atob(file.data);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteArr], { type: mime });
+        url = URL.createObjectURL(blob);
+        name = file.name.replace(/\.[^.]+$/, "");
+      } catch (err) {
+        if (err?.message?.includes("cancel") || err?.message?.includes("dismiss")) return;
+        toast("Couldn't open music picker", { icon: "❌" });
+        return;
+      }
+    } else {
+      // Web: use the file input element
+      const file = e?.target?.files?.[0];
+      if (!file) return;
+      url = URL.createObjectURL(file);
+      name = file.name.replace(/\.[^.]+$/, "");
+    }
+
     setMusicFile(url);
-    setMusicName(file.name.replace(/\.[^.]+$/, ""));
+    setMusicName(name);
     analyseAudio(url);
     if (audioRef.current) {
       audioRef.current.src = url;
       audioRef.current.currentTime = musicStart;
       audioRef.current.volume = musicVol;
-      // Try to play, but handle autoplay restrictions gracefully
-      audioRef.current.play().catch(err => {
-        console.warn("Audio autoplay blocked (browser policy):", err);
-        // Audio will play when user interacts with controls
-      });
+      audioRef.current.play().catch(() => {});
     }
-    toast(`🎵 ${file.name.replace(/\.[^.]+$/, "")}`, { icon:"🎵" });
+    toast(`🎵 ${name}`, { icon: "🎵" });
     setTool(null);
   };
 
@@ -837,10 +864,9 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
         }
 
         setProcessing(false);
-        // Pass video path + overlayPng as a combined object
-        // onDone receives media = JSON string with { videoSrc, overlayPng }
+        // Pack everything into a JSON payload so the preview can render music + overlays
         onDone(
-          JSON.stringify({ videoSrc: media, overlayPng }),
+          JSON.stringify({ videoSrc: media, overlayPng, musicFile, musicStart, musicVol }),
           "video",
           musicFile || null,
           musicStart,
@@ -1203,7 +1229,7 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
         {tool === "music" && (
           <div style={{ padding:"10px 14px 18px", borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
             {!musicFile ? (
-              <button onClick={() => musicInputRef.current?.click()}
+              <button onClick={() => handleMusicPick(null)}
                 style={{ width:"100%", padding:"16px", borderRadius:16,
                   background:"linear-gradient(135deg,#1A1A1A 0%,#0E0E0E 100%)",
                   border:"1px dashed rgba(255,252,0,0.3)", cursor:"pointer",
@@ -1215,7 +1241,7 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
                 </div>
                 <div style={{ textAlign:"left" }}>
                   <div style={{ fontWeight:700, fontSize:14, fontFamily:"'DM Sans',sans-serif" }}>Add Sound</div>
-                  <div style={{ color:"#555", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>Pick an audio file</div>
+                  <div style={{ color:"#555", fontSize:11, fontFamily:"'DM Sans',sans-serif" }}>Pick from your music</div>
                 </div>
               </button>
             ) : (
@@ -1250,7 +1276,7 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
                     onChange={e => setMusicStart(Number(e.target.value))}
                     style={{ width:"100%", accentColor:BRAND.yellow }} />
                 </div>
-                <button onClick={() => musicInputRef.current?.click()}
+                <button onClick={() => handleMusicPick(null)}
                   style={{ background:"#1A1A1A", border:"0.5px solid rgba(255,255,255,0.1)",
                     borderRadius:12, padding:"8px", color:"#AAA", cursor:"pointer", fontSize:12,
                     fontFamily:"'DM Sans',sans-serif" }}>
@@ -1258,8 +1284,11 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
                 </button>
               </div>
             )}
-            <input ref={musicInputRef} type="file" accept="audio/*"
-              style={{ display:"none" }} onChange={handleMusicPick} />
+            {/* Web fallback — on native we use FilePicker directly */}
+            {!window.Capacitor?.isNativePlatform?.() && (
+              <input ref={musicInputRef} type="file" accept="audio/*"
+                style={{ display:"none" }} onChange={handleMusicPick} />
+            )}
           </div>
         )}
       </div>
@@ -1796,9 +1825,16 @@ export default function SnipChat() {
                 // media may be raw path or JSON {videoSrc, overlayPng} from editor
                 let videoSrc = captured.media;
                 let overlayPng = null;
+                let previewMusic = null, previewMusicStart = 0, previewMusicVol = 0.8;
                 try {
                   const parsed = JSON.parse(captured.media);
-                  if (parsed.videoSrc) { videoSrc = parsed.videoSrc; overlayPng = parsed.overlayPng; }
+                  if (parsed.videoSrc) {
+                    videoSrc = parsed.videoSrc;
+                    overlayPng = parsed.overlayPng;
+                    previewMusic = parsed.musicFile;
+                    previewMusicStart = parsed.musicStart || 0;
+                    previewMusicVol = parsed.musicVol ?? 0.8;
+                  }
                 } catch (_) {}
                 const src = isNative.current && window.Capacitor?.convertFileSrc
                   ? window.Capacitor.convertFileSrc(
@@ -1810,6 +1846,12 @@ export default function SnipChat() {
                     autoPlay loop playsInline muted={false} />
                   {overlayPng && <img src={overlayPng} alt="" style={{ position:"absolute", inset:0,
                     width:"100%", height:"100%", objectFit:"cover", pointerEvents:"none" }} />}
+                  {previewMusic && (
+                    <audio key={previewMusic} src={previewMusic} autoPlay loop
+                      style={{ display:"none" }}
+                      ref={el => { if (el) { el.currentTime = previewMusicStart; el.volume = previewMusicVol; } }}
+                    />
+                  )}
                 </>;
               })()
                 : <img src={captured.media} alt="preview"
