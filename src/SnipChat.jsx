@@ -1229,7 +1229,7 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
         {tool === "music" && (
           <div style={{ padding:"10px 14px 18px", borderTop:"0.5px solid rgba(255,255,255,0.06)" }}>
             {!musicFile ? (
-              <button onClick={() => handleMusicPick(null)}
+              <button onClick={() => { if (window.Capacitor?.isNativePlatform?.()) handleMusicPick(null); else musicInputRef.current?.click(); }}
                 style={{ width:"100%", padding:"16px", borderRadius:16,
                   background:"linear-gradient(135deg,#1A1A1A 0%,#0E0E0E 100%)",
                   border:"1px dashed rgba(255,252,0,0.3)", cursor:"pointer",
@@ -1276,7 +1276,7 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
                     onChange={e => setMusicStart(Number(e.target.value))}
                     style={{ width:"100%", accentColor:BRAND.yellow }} />
                 </div>
-                <button onClick={() => handleMusicPick(null)}
+                <button onClick={() => { if (window.Capacitor?.isNativePlatform?.()) handleMusicPick(null); else musicInputRef.current?.click(); }}
                   style={{ background:"#1A1A1A", border:"0.5px solid rgba(255,255,255,0.1)",
                     borderRadius:12, padding:"8px", color:"#AAA", cursor:"pointer", fontSize:12,
                     fontFamily:"'DM Sans',sans-serif" }}>
