@@ -1308,18 +1308,30 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
 
 // ─── Record Button ────────────────────────────────────────────────────────────
 function RecordButton({ onCapture, onRecordStart, onRecordStop, isRecording, progress }) {
-  const holdTimer = useRef(null);
+  const holdTimer   = useRef(null);
+  const didRecord   = useRef(false); // tracks whether this press started a recording
   const [holding, setHolding] = useState(false);
 
   const onPressStart = () => {
     setHolding(true);
-    holdTimer.current = setTimeout(() => { onRecordStart(); }, 250);
+    didRecord.current = false;
+    holdTimer.current = setTimeout(() => {
+      didRecord.current = true;
+      onRecordStart();
+    }, 250);
   };
+
   const onPressEnd = () => {
     setHolding(false);
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    if (isRecording) { onRecordStop(); }
-    else { onCapture(); }
+    clearTimeout(holdTimer.current);
+    if (didRecord.current || isRecording) {
+      // This press started/was a recording — stop it, never capture
+      didRecord.current = false;
+      onRecordStop();
+    } else {
+      // Short tap — take a photo
+      onCapture();
+    }
   };
 
   const circumference = 2 * Math.PI * 34;
@@ -1336,7 +1348,7 @@ function RecordButton({ onCapture, onRecordStart, onRecordStop, isRecording, pro
         </svg>
       )}
       <button
-        onMouseDown={onPressStart} onMouseUp={onPressEnd} onMouseLeave={onPressEnd}
+        onMouseDown={onPressStart} onMouseUp={onPressEnd}
         onTouchStart={e => { e.preventDefault(); onPressStart(); }}
         onTouchEnd={e => { e.preventDefault(); onPressEnd(); }}
         style={{ position:"absolute", inset:8, borderRadius:"50%",
@@ -1865,19 +1877,27 @@ export default function SnipChat() {
         )}
 
         {/* Edit screen */}
-        {captured && editing && (
-          <EditScreen
-            media={captured.media}
-            mediaType={captured.type}
-            toast={toast}
-            onDiscard={() => setEditing(false)}
-            onDone={(newMedia, newType, musicUrl, musicStartSec, musicVolume) => {
-              setCaptured({ media: newMedia, type: newType || captured.type });
-              setEditing(false);
-              toast("Edits applied!", { icon: "✂️" });
-            }}
-          />
-        )}
+        {captured && editing && (() => {
+          // For native video file:// paths, convert to a WebView-accessible URL before passing to editor
+          const editMedia = captured.type === "video" && isNative.current && window.Capacitor?.convertFileSrc
+            ? window.Capacitor.convertFileSrc(
+                captured.media.startsWith("file://") ? captured.media : "file://" + captured.media
+              )
+            : captured.media;
+          return (
+            <EditScreen
+              media={editMedia}
+              mediaType={captured.type}
+              toast={toast}
+              onDiscard={() => setEditing(false)}
+              onDone={(newMedia, newType, musicUrl, musicStartSec, musicVolume) => {
+                setCaptured({ media: newMedia, type: newType || captured.type });
+                setEditing(false);
+                toast("Edits applied!", { icon: "✂️" });
+              }}
+            />
+          );
+        })()}
 
         {showSaved && <SavedGallery snaps={savedSnaps} onClose={() => setShowSaved(false)} />}
         {showChat && <ChatOverlay messages={messages} onClose={() => setShowChat(false)} onViewSnip={viewSnip} />}
