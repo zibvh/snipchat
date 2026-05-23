@@ -1293,7 +1293,19 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
         )}
       </div>
 
-      <audio ref={audioRef} loop style={{ display:"none" }} />
+      <audio ref={audioRef} style={{ display:"none" }}
+        onTimeUpdate={() => {
+          // Stop audio when it exceeds video duration
+          const vid = document.getElementById("edit-video");
+          if (vid && audioRef.current && !audioRef.current.paused) {
+            if (audioRef.current.currentTime - musicStart >= vid.duration) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = musicStart;
+              audioRef.current.play().catch(() => {});
+            }
+          }
+        }}
+      />
     </div>
   );
 }
@@ -1375,6 +1387,10 @@ export default function SnipChat() {
   const [chatInput,    setChatInput]    = useState("");
   const [viewingSnip,  setViewingSnip]  = useState(null);
   const [showFilters,  setShowFilters]  = useState(false);
+  const [camMusicFile, setCamMusicFile] = useState(null);  // blob URL of selected track
+  const [camMusicName, setCamMusicName] = useState(null);
+  const camMusicRef    = useRef(null);   // <audio> element for camera-screen music
+  const camMusicInputRef = useRef(null); // hidden <input> for web fallback
   const [isRecording,  setIsRecording]  = useState(false);
   const [recProgress,  setRecProgress]  = useState(0);
   const [editing,      setEditing]      = useState(false);
@@ -1560,9 +1576,10 @@ export default function SnipChat() {
         toast("Recording failed", { icon: "❌" });
       }
     } else {
+      if (camMusicRef.current) { camMusicRef.current.pause(); camMusicRef.current.currentTime = 0; }
       if (mediaRecRef.current?.state !== "inactive") mediaRecRef.current?.stop();
     }
-  }, []);
+  }, [camMusicFile]);
 
   const flipCamera = () => {
     const next = facingMode === "user" ? "environment" : "user";
@@ -1571,17 +1588,51 @@ export default function SnipChat() {
     toast(next === "user" ? "Front cam" : "Back cam", { icon: "🔄" });
   };
 
-  const [flashMode, setFlashMode] = useState("off"); // "off" | "on" | "auto" | "torch"
-  const FLASH_CYCLE = ["off", "on", "auto", "torch"];
-  const FLASH_ICONS = { off: "⚡️", on: "⚡️", auto: "⚡️", torch: "🔦" };
-  const FLASH_LABELS = { off: "Off", on: "On", auto: "Auto", torch: "Torch" };
+  const pickCamMusic = async () => {
+    if (window.Capacitor?.isNativePlatform?.()) {
+      try {
+        const result = await FilePicker.pickFiles({
+          types: ["audio/mpeg","audio/mp4","audio/ogg","audio/wav","audio/flac","audio/aac","audio/*"],
+          readData: true, multiple: false,
+        });
+        const file = result.files[0];
+        if (!file) return;
+        const mime = file.mimeType || "audio/mpeg";
+        const byteChars = atob(file.data);
+        const byteArr = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+        const blob = new Blob([byteArr], { type: mime });
+        setCamMusicFile(URL.createObjectURL(blob));
+        setCamMusicName(file.name.replace(/\.[^.]+$/, ""));
+      } catch (e) {
+        if (!e?.message?.includes("cancel") && !e?.message?.includes("dismiss"))
+          toast("Couldn't open music picker", { icon: "❌" });
+      }
+    } else {
+      camMusicInputRef.current?.click();
+    }
+  };
+
+  const handleCamMusicInput = (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    setCamMusicFile(URL.createObjectURL(file));
+    setCamMusicName(file.name.replace(/\.[^.]+$/, ""));
+  };
+
+  const removeCamMusic = () => {
+    if (camMusicRef.current) { camMusicRef.current.pause(); camMusicRef.current.src = ""; }
+    setCamMusicFile(null);
+    setCamMusicName(null);
+  };
+
+  const [flashMode, setFlashMode] = useState("off"); // "off" | "torch"
   const toggleFlash = async () => {
-    const next = FLASH_CYCLE[(FLASH_CYCLE.indexOf(flashMode) + 1) % FLASH_CYCLE.length];
+    const next = flashMode === "off" ? "torch" : "off";
     setFlashMode(next);
     if (isNative.current) {
       try { await CameraPreview.setFlashMode({ flashMode: next }); } catch (_) {}
     }
-    toast(`Flash: ${FLASH_LABELS[next]}`, { icon: FLASH_ICONS[next] });
   };
 
   const saveToStorage = async (media, type) => {
@@ -1799,13 +1850,50 @@ export default function SnipChat() {
             progress={recProgress}
           />
 
-          <button onClick={flipCamera}
-            style={{ background:"rgba(255,255,255,0.2)", border:"none", borderRadius:30,
-              width:44, height:44, display:"flex", alignItems:"center", justifyContent:"center",
-              cursor:"pointer", backdropFilter:"blur(10px)" }}>
-            <RefreshCw size={20} color="#FFF" />
-          </button>
+          {/* Right side: music + flip stacked */}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+            <button onClick={pickCamMusic}
+              style={{ background: camMusicFile ? "rgba(255,252,0,0.2)" : "rgba(255,255,255,0.2)",
+                border: camMusicFile ? `1px solid ${BRAND.yellow}88` : "none",
+                borderRadius:30, width:44, height:44,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", backdropFilter:"blur(10px)" }}
+              title={camMusicFile ? camMusicName : "Add music"}>
+              <Music size={19} color={camMusicFile ? BRAND.yellow : "#FFF"} />
+            </button>
+            <button onClick={flipCamera}
+              style={{ background:"rgba(255,255,255,0.2)", border:"none", borderRadius:30,
+                width:44, height:44, display:"flex", alignItems:"center", justifyContent:"center",
+                cursor:"pointer", backdropFilter:"blur(10px)" }}>
+              <RefreshCw size={20} color="#FFF" />
+            </button>
+          </div>
+
+          {/* Hidden audio element for camera-screen music */}
+          <audio ref={camMusicRef} src={camMusicFile || ""} loop style={{ display:"none" }} />
+          {/* Web fallback file input */}
+          <input ref={camMusicInputRef} type="file" accept="audio/*"
+            style={{ display:"none" }} onChange={handleCamMusicInput} />
         </div>
+
+        {/* Active music pill */}
+        {camMusicFile && !captured && (
+          <div style={{ position:"absolute", bottom:160, left:0, right:0,
+            display:"flex", justifyContent:"center", zIndex:10, pointerEvents:"none" }}>
+            <div style={{ background:"rgba(0,0,0,0.7)", borderRadius:20,
+              padding:"5px 14px", display:"flex", alignItems:"center", gap:8,
+              pointerEvents:"all" }}>
+              <Music size={12} color={BRAND.yellow} />
+              <span style={{ color:"#FFF", fontSize:12, maxWidth:180,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {camMusicName}
+              </span>
+              <button onClick={removeCamMusic}
+                style={{ background:"none", border:"none", cursor:"pointer",
+                  color:"#888", padding:0, lineHeight:1, fontSize:14 }}>✕</button>
+            </div>
+          </div>
+        )}
 
         {/* Hint */}
         {camState === CAM_STATE.GRANTED && !captured && (
@@ -1847,9 +1935,26 @@ export default function SnipChat() {
                   {overlayPng && <img src={overlayPng} alt="" style={{ position:"absolute", inset:0,
                     width:"100%", height:"100%", objectFit:"cover", pointerEvents:"none" }} />}
                   {previewMusic && (
-                    <audio key={previewMusic} src={previewMusic} autoPlay loop
+                    <audio key={previewMusic} src={previewMusic}
                       style={{ display:"none" }}
-                      ref={el => { if (el) { el.currentTime = previewMusicStart; el.volume = previewMusicVol; } }}
+                      ref={el => {
+                        if (!el) return;
+                        el.currentTime = previewMusicStart;
+                        el.volume = previewMusicVol;
+                        el.play().catch(() => {});
+                        // Stop music when video ends — find the sibling video
+                        const vid = el.parentElement?.querySelector("video");
+                        if (vid) {
+                          vid.onended = () => el.pause();
+                          // also limit audio to video duration
+                          const checkTime = () => {
+                            if (!vid.paused && el.currentTime - previewMusicStart >= vid.duration) {
+                              el.pause();
+                            }
+                          };
+                          el.ontimeupdate = checkTime;
+                        }
+                      }}
                     />
                   )}
                 </>;
