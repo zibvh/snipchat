@@ -311,13 +311,14 @@ const SavedGallery = memo(({ snaps, onClose }) => (
         {snaps.map(snap => (
           <div key={snap.id} style={{ aspectRatio:"1", borderRadius:6, overflow:"hidden", position:"relative" }}>
             {snap.type === "video"
-              ? <video
-                  src={window.Capacitor?.convertFileSrc
-                    ? window.Capacitor.convertFileSrc(
-                        snap.media.startsWith("file://") ? snap.media : "file://" + snap.media
-                      )
-                    : snap.media}
-                  style={{ width:"100%", height:"100%", objectFit:"cover" }} muted playsInline />
+              ? (() => {
+                  let vsrc = snap.media;
+                  try { const p = JSON.parse(snap.media); if (p.videoSrc) vsrc = p.videoSrc; } catch (_) {}
+                  const src = window.Capacitor?.convertFileSrc
+                    ? window.Capacitor.convertFileSrc(vsrc.startsWith("file://") ? vsrc : "file://" + vsrc)
+                    : vsrc;
+                  return <video src={src} style={{ width:"100%", height:"100%", objectFit:"cover" }} muted playsInline />;
+                })()
               : <img src={snap.media} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
             }
             <div style={{ position:"absolute", top:4, left:4, background:"rgba(0,0,0,0.6)",
@@ -814,75 +815,37 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
           onDone(finalDataUrl, "photo", null, 0, 1);
         }
       } else {
-        // Video path — re-encode with overlays baked in via canvas stream
+        // Video path — store overlay as a PNG data URL on top of the original video.
+        // Re-encoding via captureStream is broken on Android WebView, so we instead
+        // return the video path unchanged plus a separate overlayPng that the preview
+        // renders as an <img> on top of the <video>. This works reliably everywhere.
         const overlayCanvas = canvasRef.current;
         const hasOverlays = texts.length > 0 || stickers.length > 0 || overlayCanvas?.dataset?.painted;
 
-        if (!hasOverlays && !musicFile) {
-          // No changes — return original
-          setProcessing(false);
-          onDone(media, "video", null, 0, 1);
-          return;
+        // Build overlay PNG if there's anything to bake
+        let overlayPng = null;
+        if (hasOverlays) {
+          const tmp = document.createElement("canvas");
+          tmp.width  = overlayCanvas?.width  || 720;
+          tmp.height = overlayCanvas?.height || 1280;
+          const ctx = tmp.getContext("2d");
+          // Paint strokes
+          if (overlayCanvas?.width > 0) ctx.drawImage(overlayCanvas, 0, 0, tmp.width, tmp.height);
+          // Text + stickers
+          bakeOverlays(tmp);
+          overlayPng = tmp.toDataURL("image/png");
         }
 
-        // Get the video src (convert if native file://)
-        const vidSrc = window.Capacitor?.convertFileSrc
-          ? (media.startsWith("file://") || media.startsWith("/")
-              ? window.Capacitor.convertFileSrc(media.startsWith("file://") ? media : "file://" + media)
-              : media)
-          : media;
-
-        const vid = document.createElement("video");
-        vid.src = vidSrc;
-        vid.muted = true;
-        await new Promise(res => { vid.onloadedmetadata = res; vid.load(); });
-        const duration = vid.duration;
-
-        // Output canvas: video frame + overlay drawn on top
-        const out = document.createElement("canvas");
-        out.width  = vid.videoWidth  || 720;
-        out.height = vid.videoHeight || 1280;
-        const outCtx = out.getContext("2d");
-
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-          ? "video/webm;codecs=vp8,opus" : "video/webm";
-        const chunks = [];
-        const stream = out.captureStream(30);
-        const mr = new MediaRecorder(stream, { mimeType });
-        mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-
-        const result = await new Promise(resolve => {
-          mr.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
-          mr.start(100);
-          vid.currentTime = 0;
-          vid.play();
-
-          const drawFrame = () => {
-            if (vid.ended || vid.currentTime >= duration) {
-              mr.stop();
-              return;
-            }
-            outCtx.drawImage(vid, 0, 0, out.width, out.height);
-            // Bake overlay canvas (paint strokes) on top
-            if (overlayCanvas && overlayCanvas.width > 0) {
-              outCtx.drawImage(overlayCanvas, 0, 0, out.width, out.height);
-            }
-            // Bake text + stickers
-            bakeOverlays(out);
-            requestAnimationFrame(drawFrame);
-          };
-          vid.onplay = () => requestAnimationFrame(drawFrame);
-        });
-
-        const blobUrl = URL.createObjectURL(result);
-        if (musicFile) {
-          const muxed = await muxAudioIntoVideo(result, musicFile, duration);
-          setProcessing(false);
-          onDone(muxed, "video", musicFile, musicStart, musicVol);
-        } else {
-          setProcessing(false);
-          onDone(blobUrl, "video", null, 0, 1);
-        }
+        setProcessing(false);
+        // Pass video path + overlayPng as a combined object
+        // onDone receives media = JSON string with { videoSrc, overlayPng }
+        onDone(
+          JSON.stringify({ videoSrc: media, overlayPng }),
+          "video",
+          musicFile || null,
+          musicStart,
+          musicVol
+        );
       }
     } catch (err) {
       console.error(err);
@@ -1308,28 +1271,30 @@ function EditScreen({ media, mediaType, onDone, onDiscard, toast }) {
 
 // ─── Record Button ────────────────────────────────────────────────────────────
 function RecordButton({ onCapture, onRecordStart, onRecordStop, isRecording, progress }) {
-  const holdTimer   = useRef(null);
-  const didRecord   = useRef(false); // tracks whether this press started a recording
+  const holdTimer     = useRef(null);
+  const pressedLong   = useRef(false); // true once the hold threshold passes
+  const isRecordingRef = useRef(isRecording);
+  useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
   const [holding, setHolding] = useState(false);
 
   const onPressStart = () => {
     setHolding(true);
-    didRecord.current = false;
+    pressedLong.current = false;
     holdTimer.current = setTimeout(() => {
-      didRecord.current = true;
+      pressedLong.current = true;
       onRecordStart();
-    }, 250);
+    }, 300);
   };
 
   const onPressEnd = () => {
     setHolding(false);
     clearTimeout(holdTimer.current);
-    if (didRecord.current || isRecording) {
-      // This press started/was a recording — stop it, never capture
-      didRecord.current = false;
+    if (pressedLong.current || isRecordingRef.current) {
+      // Was a hold/recording — stop recording, NEVER snap a photo
+      pressedLong.current = false;
       onRecordStop();
     } else {
-      // Short tap — take a photo
+      // Quick tap — take a photo
       onCapture();
     }
   };
@@ -1592,10 +1557,18 @@ export default function SnipChat() {
 
   const saveToStorage = async (media, type) => {
     try {
+      // Unwrap JSON overlay format from video editing
+      let actualMedia = media;
+      if (type === "video") {
+        try {
+          const parsed = JSON.parse(media);
+          if (parsed.videoSrc) actualMedia = parsed.videoSrc;
+        } catch (_) {}
+      }
       const id = Date.now();
       const ext = type === "video" ? "mp4" : "png";
       const filename = `snipchat_${id}.${ext}`;
-      let savedMediaPath = media;
+      let savedMediaPath = actualMedia;
 
       if (isNative.current) {
         if (type === "video" && (media.startsWith("file://") || media.startsWith("/"))) {
@@ -1819,20 +1792,26 @@ export default function SnipChat() {
           <div style={{ position:"absolute", inset:0, zIndex:50, background:"#000",
             display:"flex", flexDirection:"column", animation:"slideUp 0.3s ease" }}>
             <div style={{ flex:1, position:"relative", overflow:"hidden" }}>
-              {captured.type === "video"
-                ? <video
-                    src={isNative.current
-                      ? (window.Capacitor?.convertFileSrc
-                          ? window.Capacitor.convertFileSrc(
-                              captured.media.startsWith("file://")
-                                ? captured.media
-                                : "file://" + captured.media
-                            )
-                          : captured.media)
-                      : captured.media}
-                    style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                    autoPlay loop playsInline
-                  />
+              {captured.type === "video" ? (() => {
+                // media may be raw path or JSON {videoSrc, overlayPng} from editor
+                let videoSrc = captured.media;
+                let overlayPng = null;
+                try {
+                  const parsed = JSON.parse(captured.media);
+                  if (parsed.videoSrc) { videoSrc = parsed.videoSrc; overlayPng = parsed.overlayPng; }
+                } catch (_) {}
+                const src = isNative.current && window.Capacitor?.convertFileSrc
+                  ? window.Capacitor.convertFileSrc(
+                      videoSrc.startsWith("file://") ? videoSrc : "file://" + videoSrc
+                    )
+                  : videoSrc;
+                return <>
+                  <video src={src} style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                    autoPlay loop playsInline muted={false} />
+                  {overlayPng && <img src={overlayPng} alt="" style={{ position:"absolute", inset:0,
+                    width:"100%", height:"100%", objectFit:"cover", pointerEvents:"none" }} />}
+                </>;
+              })()
                 : <img src={captured.media} alt="preview"
                     style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               }
@@ -1879,11 +1858,16 @@ export default function SnipChat() {
         {/* Edit screen */}
         {captured && editing && (() => {
           // For native video file:// paths, convert to a WebView-accessible URL before passing to editor
+          // Unwrap JSON overlay format
+          let rawVideoSrc = captured.media;
+          if (captured.type === "video") {
+            try { const p = JSON.parse(captured.media); if (p.videoSrc) rawVideoSrc = p.videoSrc; } catch (_) {}
+          }
           const editMedia = captured.type === "video" && isNative.current && window.Capacitor?.convertFileSrc
             ? window.Capacitor.convertFileSrc(
-                captured.media.startsWith("file://") ? captured.media : "file://" + captured.media
+                rawVideoSrc.startsWith("file://") ? rawVideoSrc : "file://" + rawVideoSrc
               )
-            : captured.media;
+            : rawVideoSrc;
           return (
             <EditScreen
               media={editMedia}
